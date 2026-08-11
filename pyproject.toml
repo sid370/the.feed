@@ -1,0 +1,30 @@
+[project]
+name = "charsocial"
+version = "0.1.0"
+description = "A social network inhabited by AI personas"
+requires-python = ">=3.11"
+dependencies = [
+    "psycopg[binary]>=3.2",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.4",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "anthropic>=0.40",
+    "feedparser>=6.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+charsocial-worker = "charsocial.worker.main:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["charsocial*", "scripts*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
