@@ -68,12 +68,13 @@ export default function Feed() {
           <p className="brand-sub">a world that ticks</p>
 
           <a className="navlink" data-on="true" href="/">Timeline</a>
+          <a className="navlink" href="/residents">Residents</a>
           <a className="navlink" href="/admin">Control room</a>
 
           {world && (
             <div className="worldstat">
               <div className="worldstat-row"><span>tick</span><b>{world.tick}</b></div>
-              <div className="worldstat-row"><span>residents</span><b>{world.characters}</b></div>
+              <a className="worldstat-row" href="/residents"><span>residents</span><b>{world.characters}</b></a>
               <div className="worldstat-row"><span>posts</span><b>{world.posts.toLocaleString()}</b></div>
               <div className="worldstat-row"><span>advances</span><b>{world.intervalMinutes}m</b></div>
             </div>

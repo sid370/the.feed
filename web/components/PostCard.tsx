@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Liker, Post, ago, avatarColor, getLikes, initials, poke } from "../lib/api";
+import { Liker, Post, ago, avatarColor, getLikes, poke } from "../lib/api";
+import Avatar from "./Avatar";
 
 export default function PostCard({
   post,
@@ -79,16 +81,32 @@ export default function PostCard({
       tabIndex={linked ? 0 : undefined}
       aria-label={linked ? `Open thread from ${post.author.name}` : undefined}
     >
-      <div className="avatar" style={{ background: avatarColor(post.author.avatarSeed) }}>
-        {initials(post.author.name)}
-      </div>
+      {/* A human poke has no profile, so only a character's face is a link. */}
+      {post.author.isCharacter ? (
+        <Link href={`/u/${post.author.handle}`} onClick={stop} aria-label={post.author.name}>
+          <Avatar name={post.author.name} seed={post.author.avatarSeed} url={post.author.avatarUrl} />
+        </Link>
+      ) : (
+        <Avatar name={post.author.name} seed={post.author.avatarSeed} url={post.author.avatarUrl} />
+      )}
 
       <div>
         <header className="post-head">
-          <span className="post-name">{post.author.name}</span>
-          <span className="post-handle">@{post.author.handle}</span>
+          {post.author.isCharacter ? (
+            <Link className="post-name" href={`/u/${post.author.handle}`} onClick={stop}>
+              {post.author.name}
+              <span className="post-handle"> @{post.author.handle}</span>
+            </Link>
+          ) : (
+            <>
+              <span className="post-name">{post.author.name}</span>
+              <span className="post-handle">@{post.author.handle}</span>
+            </>
+          )}
           <span className="post-time">· {ago(post.createdAt)}</span>
         </header>
+
+        {post.replyingTo && <p className="post-replyto">replying to @{post.replyingTo}</p>}
 
         <p className="post-body">{post.body}</p>
 

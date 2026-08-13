@@ -13,13 +13,16 @@ from __future__ import annotations
 
 import json
 
+from charsocial import db
 from charsocial.config import CONFIG
 from charsocial.llm import utility_call
 from charsocial.prompts import DRAFT_PROMPT
 from charsocial.schemas import CharacterDraft
 
 
-def draft(cur, name: str, context: str, notes: str = "", source_material: str = "") -> dict | None:
+def draft(
+    cur: db.Cursor, name: str, context: str, notes: str = "", source_material: str = ""
+) -> dict | None:
     result = utility_call(
         DRAFT_PROMPT.format(
             name=name,
@@ -49,10 +52,10 @@ def draft(cur, name: str, context: str, notes: str = "", source_material: str = 
             handle,
         ),
     )
-    return dict(cur.fetchone())
+    return dict(db.one(cur))
 
 
-def activate(cur, character_id) -> None:
+def activate(cur: db.Cursor, character_id) -> None:
     """The only place an agent acquires world presence: relations against the existing
     cast, a few follows, and eligibility for turns."""
     cur.execute(
@@ -90,7 +93,7 @@ def activate(cur, character_id) -> None:
     )
 
 
-def set_status(cur, character_id, status: str) -> None:
+def set_status(cur: db.Cursor, character_id, status: str) -> None:
     if status not in {"draft", "active", "paused", "retired"}:
         raise ValueError(f"unknown status {status}")
     if status == "active":
@@ -99,7 +102,7 @@ def set_status(cur, character_id, status: str) -> None:
     cur.execute("UPDATE characters SET status = %s WHERE id = %s", (status, character_id))
 
 
-def _unique_handle(cur, handle: str) -> str:
+def _unique_handle(cur: db.Cursor, handle: str) -> str:
     handle = "".join(ch for ch in handle.lower() if ch.isalnum() or ch == "_")[:28] or "character"
     candidate, n = handle, 1
     while True:

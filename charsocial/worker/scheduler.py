@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import random
 
+from charsocial import db
 from charsocial.config import CONFIG, INTENT_DECK
 from charsocial.models import ActingCharacter, RelationView, SlateItem, TurnContext
 
@@ -15,7 +16,7 @@ from charsocial.models import ActingCharacter, RelationView, SlateItem, TurnCont
 FIGHTY = {0, 3, 4, 7}
 
 
-def select_turns(cur, budget: int, rng: random.Random) -> list[ActingCharacter]:
+def select_turns(cur: db.Cursor, budget: int, rng: random.Random) -> list[ActingCharacter]:
     """Notification-driven first, then scheduled baseline — the two reasons a real person
     opens the app. Never more than `budget` turns, because that is the only spend cap."""
     cur.execute(
@@ -62,7 +63,7 @@ def _sample_intent(character: ActingCharacter, rng: random.Random) -> str | None
     return rng.choices(INTENT_DECK, weights=weights, k=1)[0]
 
 
-def build_slate(cur, character_id, size: int | None = None) -> list[SlateItem]:
+def build_slate(cur: db.Cursor, character_id, size: int | None = None) -> list[SlateItem]:
     """The ~5 posts this character's algorithm surfaced. Ranked by heat x recency, so a
     thread that is blowing up crowds out one that died — preferential attachment, which
     is how a real feed produces one 30-reply thread and ten dead ones.
@@ -84,7 +85,7 @@ def build_slate(cur, character_id, size: int | None = None) -> list[SlateItem]:
     return [_slate_row(r) for r in directed + feed]
 
 
-def _slate_query(cur, character_id, limit: int, directed: bool, exclude=None):
+def _slate_query(cur: db.Cursor, character_id, limit: int, directed: bool, exclude=None):
     if limit <= 0:
         return []
     match = "EXISTS" if directed else "NOT EXISTS"

@@ -7,6 +7,16 @@ about. Two layers, and the cheap one does most of the work.
 """
 from __future__ import annotations
 
+import socket
+from concurrent.futures import ThreadPoolExecutor
+
+# Optional: without it the world simply runs with no headlines.
+try:
+    import feedparser
+except ImportError:
+    feedparser = None
+
+from charsocial import db
 from charsocial.config import CONFIG, RSS_FEEDS
 from charsocial.llm import utility_call
 from charsocial.models import Assignment
@@ -14,40 +24,44 @@ from charsocial.prompts import CASTING_PROMPT, SAFETY_PROMPT
 from charsocial.schemas import CastingPlan, SafetyReport
 
 
-def fetch_feeds() -> list[tuple[str, str, str]]:
-    """Network only — no database handle.
-
-    This deliberately runs BEFORE the tick opens its transaction. Fetching five RSS
-    feeds can take tens of seconds, and holding a Postgres transaction open across
-    that gets the connection dropped mid-tick.
-    """
+def _read_feed(item: tuple[str, str]) -> list[tuple[str, str, str]]:
+    source, url = item
     try:
-        import feedparser
-    except ImportError:
+        feed = feedparser.parse(url)
+    except Exception:
         return []
-
-    import socket
-
-    previous = socket.getdefaulttimeout()
-    socket.setdefaulttimeout(6)
-    entries: list[tuple[str, str, str]] = []
-    try:
-        for source, url in RSS_FEEDS:
-            try:
-                feed = feedparser.parse(url)
-            except Exception:
-                continue
-            for entry in feed.entries[:10]:
-                title = (getattr(entry, "title", "") or "").strip()
-                link = (getattr(entry, "link", "") or "").strip()
-                if title and link:
-                    entries.append((source, title[:300], link))
-    finally:
-        socket.setdefaulttimeout(previous)
+    entries = []
+    for entry in feed.entries[:10]:
+        title = (getattr(entry, "title", "") or "").strip()
+        link = (getattr(entry, "link", "") or "").strip()
+        if title and link:
+            entries.append((source, title[:300], link))
     return entries
 
 
-def store(cur, entries: list[tuple[str, str, str]]) -> int:
+def fetch_feeds() -> list[tuple[str, str, str]]:
+    """Network only — no database handle.
+
+    This deliberately runs BEFORE the tick opens its transaction. Holding a Postgres
+    transaction open across the fetch gets the connection dropped mid-tick.
+
+    Fetched in parallel because the feed list is dozens long: sequentially, one slow
+    host per feed would put minutes on every tick. Cost does not scale with the list —
+    classify() screens a fixed number per tick however many headlines land.
+    """
+    if feedparser is None:
+        return []
+
+    previous = socket.getdefaulttimeout()
+    socket.setdefaulttimeout(6)
+    try:
+        with ThreadPoolExecutor(max_workers=12) as pool:
+            return [entry for batch in pool.map(_read_feed, RSS_FEEDS) for entry in batch]
+    finally:
+        socket.setdefaulttimeout(previous)
+
+
+def store(cur: db.Cursor, entries: list[tuple[str, str, str]]) -> int:
     added = 0
     for source, title, link in entries:
         cur.execute(
@@ -59,7 +73,7 @@ def store(cur, entries: list[tuple[str, str, str]]) -> int:
     return added
 
 
-def classify(cur) -> int:
+def classify(cur: db.Cursor) -> int:
     """Gate anything not yet screened. Unscreened headlines can never be used."""
     cur.execute(
         "SELECT id, title FROM headlines WHERE safe IS NULL ORDER BY ingested_at DESC LIMIT %s",
@@ -88,7 +102,7 @@ def classify(cur) -> int:
     return len(rows)
 
 
-def cast(cur, max_picks: int) -> tuple[list[Assignment], float]:
+def cast(cur: db.Cursor, max_picks: int) -> tuple[list[Assignment], float]:
     """One LLM call that scores newsworthiness and pairs headlines with characters.
 
     Matching a headline to the character who'd be funniest on it is exactly the judgment
@@ -158,7 +172,7 @@ def cast(cur, max_picks: int) -> tuple[list[Assignment], float]:
     return assignments, news_share
 
 
-def mark_used(cur, assignments: list[Assignment]) -> None:
+def mark_used(cur: db.Cursor, assignments: list[Assignment]) -> None:
     """Called after the tick truncates to its news budget.
 
     `cast` proposes up to the full budget but only `news_share` of them get a turn.

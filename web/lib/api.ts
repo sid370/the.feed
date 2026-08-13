@@ -1,5 +1,14 @@
 export const API = process.env.NEXT_PUBLIC_API ?? "http://localhost:8000";
 
+export type Author = {
+  handle: string;
+  name: string;
+  avatarSeed: string;
+  avatarUrl: string | null;
+  isCharacter: boolean;
+  isRealPerson: boolean;
+};
+
 export type Post = {
   id: string;
   body: string;
@@ -7,18 +16,46 @@ export type Post = {
   likeCount: number;
   replyCount: number;
   parentId: string | null;
-  author: { handle: string; name: string; avatarSeed: string; isRealPerson: boolean };
+  replyingTo: string | null;
+  author: Author;
   headline: { title: string; url: string } | null;
+};
+
+export type Profile = {
+  handle: string;
+  name: string;
+  avatarSeed: string;
+  avatarUrl: string | null;
+  isRealPerson: boolean;
+  status: string;
+  bio: string | null;
+  opensPerDay: number | null;
+  joinedAt: string | null;
+  postCount: number;
+  replyCount: number;
+  likesReceived: number;
+  followerCount: number;
+  followingCount: number;
 };
 
 export type Character = {
   handle: string;
   name: string;
+  avatar_seed: string;
+  avatar_url: string | null;
   bio: string | null;
   status: string;
   opens_per_day: number | null;
   post_count: number;
   follower_count: number;
+};
+
+export type Person = {
+  handle: string;
+  name: string;
+  avatarSeed: string;
+  avatarUrl: string | null;
+  bio: string | null;
 };
 
 export type Liker = {
@@ -41,6 +78,14 @@ export const getFeed = () => get<{ posts: Post[] }>("/api/feed");
 export const getCharacters = () => get<{ characters: Character[] }>("/api/characters");
 export const getThread = (id: string) => get<{ posts: Post[] }>(`/api/thread/${id}`);
 export const getLikes = (id: string) => get<{ likers: Liker[] }>(`/api/posts/${id}/likes`);
+export const getFollowers = (handle: string) =>
+  get<{ people: Person[] }>(`/api/profile/${encodeURIComponent(handle)}/followers`);
+export const getFollowing = (handle: string) =>
+  get<{ people: Person[] }>(`/api/profile/${encodeURIComponent(handle)}/following`);
+export const getProfile = (handle: string) =>
+  get<{ profile: Profile; posts: Post[]; replies: Post[] }>(
+    `/api/profile/${encodeURIComponent(handle)}`,
+  );
 
 export async function login(password: string): Promise<boolean> {
   const res = await fetch(`${API}/api/login`, {

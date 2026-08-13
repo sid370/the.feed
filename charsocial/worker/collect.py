@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import uuid as uuidlib
 
+from charsocial import db
 from charsocial.config import CONFIG
 from charsocial.llm import LLMError, LLMFatalError, provider
 from charsocial.models import Usage
@@ -21,7 +22,7 @@ from charsocial.worker import heat
 VALID_ACTIONS = {"reply", "quote", "like", "follow", "post", "scroll"}
 
 
-def collect_open_batches(cur) -> int:
+def collect_open_batches(cur: db.Cursor) -> int:
     cur.execute(
         "SELECT id, payload, submitted_at FROM batches WHERE status = 'submitted' "
         "ORDER BY submitted_at"
@@ -80,7 +81,7 @@ def collect_open_batches(cur) -> int:
     return written
 
 
-def _fail(cur, batch_id: str, reason: str) -> None:
+def _fail(cur: db.Cursor, batch_id: str, reason: str) -> None:
     """`failed` is a terminal state the schema always documented. Writing it is what stops
     one bad batch from blocking the queue permanently."""
     cur.execute(
@@ -90,7 +91,7 @@ def _fail(cur, batch_id: str, reason: str) -> None:
     )
 
 
-def _apply_isolated(cur, ctx: dict, decision: dict, submitted_at) -> int:
+def _apply_isolated(cur: db.Cursor, ctx: dict, decision: dict, submitted_at) -> int:
     """One bad decision must cost one decision, not the tick."""
     cur.execute("SAVEPOINT turn")
     try:
@@ -103,7 +104,7 @@ def _apply_isolated(cur, ctx: dict, decision: dict, submitted_at) -> int:
         return 0
 
 
-def _apply(cur, ctx: dict, decision: dict, submitted_at) -> int:
+def _apply(cur: db.Cursor, ctx: dict, decision: dict, submitted_at) -> int:
     character_id = ctx.get("character_id")
     if not character_id or not isinstance(decision, dict):
         return 0
@@ -171,7 +172,7 @@ def _apply(cur, ctx: dict, decision: dict, submitted_at) -> int:
     return 1
 
 
-def _valid_post_id(cur, raw):
+def _valid_post_id(cur: db.Cursor, raw):
     """Models invent post ids. Parse, then confirm the row exists."""
     if not raw:
         return None
@@ -190,7 +191,7 @@ def _clamp(value) -> int:
         return 0
 
 
-def _write_post(cur, character_id, body, **kw):
+def _write_post(cur: db.Cursor, character_id, body, **kw):
     cur.execute(
         """
         INSERT INTO posts (world_id, character_id, body, parent_id, root_id,
@@ -208,13 +209,13 @@ def _write_post(cur, character_id, body, **kw):
             kw.get("headline_id"),
         ),
     )
-    new_id = cur.fetchone()["id"]
+    new_id = db.one(cur)["id"]
     if not kw.get("parent_id"):
         cur.execute("UPDATE posts SET root_id = id WHERE id = %s AND root_id IS NULL", (new_id,))
     return new_id
 
 
-def _like(cur, post_id, character_id) -> None:
+def _like(cur: db.Cursor, post_id, character_id) -> None:
     if not post_id:
         return
     cur.execute(
@@ -225,7 +226,7 @@ def _like(cur, post_id, character_id) -> None:
         cur.execute("UPDATE posts SET like_count = like_count + 1 WHERE id = %s", (post_id,))
 
 
-def _notify(cur, character_id, post_id, kind) -> None:
+def _notify(cur: db.Cursor, character_id, post_id, kind) -> None:
     """`post_id` is the post that was JUST WRITTEN, never the one it answers.
 
     Pointing a notification at the recipient's own post made it invisible: build_slate
@@ -242,7 +243,7 @@ def _notify(cur, character_id, post_id, kind) -> None:
     )
 
 
-def _consume_notifications(cur, character_id, submitted_at) -> None:
+def _consume_notifications(cur: db.Cursor, character_id, submitted_at) -> None:
     """Only clear what this character could actually have SEEN.
 
     The slate was built at submit time, so anything that arrived afterwards — a reply
@@ -257,7 +258,7 @@ def _consume_notifications(cur, character_id, submitted_at) -> None:
     )
 
 
-def _record_memory(cur, character_id, note) -> None:
+def _record_memory(cur: db.Cursor, character_id, note) -> None:
     note = (note or "").strip()
     if note:
         cur.execute(
@@ -266,13 +267,13 @@ def _record_memory(cur, character_id, note) -> None:
         )
 
 
-def _author_of(cur, post_id):
+def _author_of(cur: db.Cursor, post_id):
     cur.execute("SELECT character_id FROM posts WHERE id = %s", (post_id,))
     row = cur.fetchone()
     return row["character_id"] if row else None
 
 
-def _root_of(cur, post_id):
+def _root_of(cur: db.Cursor, post_id):
     cur.execute("SELECT coalesce(root_id, id) AS root FROM posts WHERE id = %s", (post_id,))
     row = cur.fetchone()
     return row["root"] if row else None

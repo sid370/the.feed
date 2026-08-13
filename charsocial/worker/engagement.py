@@ -11,10 +11,11 @@ from __future__ import annotations
 
 import random
 
+from charsocial import db
 from charsocial.config import CONFIG
 
 
-def scatter(cur, rng: random.Random) -> tuple[int, int]:
+def scatter(cur: db.Cursor, rng: random.Random) -> tuple[int, int]:
     cur.execute(
         """
         SELECT p.id, p.heat, p.character_id
@@ -85,7 +86,7 @@ def scatter(cur, rng: random.Random) -> tuple[int, int]:
     return likes, follows
 
 
-def vanity_notifications(cur) -> int:
+def vanity_notifications(cur: db.Cursor) -> int:
     """Let characters notice their own numbers.
 
     The free likes were pure set dressing that no character could perceive — the

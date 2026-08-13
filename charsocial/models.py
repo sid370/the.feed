@@ -137,6 +137,11 @@ class Author(Strict):
     handle: str
     name: str
     avatarSeed: str
+    # NULL for the whole cast until someone drops in an image; the frontend falls back to
+    # initials on a colour derived from avatarSeed.
+    avatarUrl: str | None = None
+    # False for human pokes, which have no profile to open.
+    isCharacter: bool = True
     # Drives the parody badge. PLAN §12 calls the watermark the control that makes a
     # leaked screenshot a non-event.
     isRealPerson: bool = False
@@ -154,12 +159,39 @@ class PostOut(Strict):
     likeCount: int
     replyCount: int
     parentId: str | None = None
+    # Handle of whoever is being answered. A reply listed away from its thread — the
+    # replies tab — reads as a non-sequitur without it.
+    replyingTo: str | None = None
     author: Author
     headline: Headline | None = None
 
 
 class FeedOut(Strict):
     posts: list[PostOut]
+
+
+class Profile(Strict):
+    handle: str
+    name: str
+    avatarSeed: str
+    avatarUrl: str | None = None
+    isRealPerson: bool = False
+    status: str
+    # The persona's own one-liner, rendered as their status under the name.
+    bio: str | None = None
+    opensPerDay: float | None = None
+    joinedAt: datetime | None = None
+    postCount: int
+    replyCount: int
+    likesReceived: int
+    followerCount: int
+    followingCount: int
+
+
+class ProfileOut(Strict):
+    profile: Profile
+    posts: list[PostOut]
+    replies: list[PostOut]
 
 
 class Liker(Strict):
@@ -171,6 +203,18 @@ class Liker(Strict):
 
 class LikesOut(Strict):
     likers: list[Liker]
+
+
+class Person(Strict):
+    handle: str
+    name: str
+    avatarSeed: str
+    avatarUrl: str | None = None
+    bio: str | None = None
+
+
+class PeopleOut(Strict):
+    people: list[Person]
 
 
 class HeatPair(Strict):
@@ -200,6 +244,7 @@ class CharacterOut(Strict):
     handle: str
     name: str
     avatar_seed: str
+    avatar_url: str | None = None
     status: str
     bio: str | None = None
     opens_per_day: float | None = None

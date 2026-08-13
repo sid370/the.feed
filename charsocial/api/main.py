@@ -38,9 +38,13 @@ from charsocial.models import (
     LoginIn,
     Ok,
     PatchIn,
+    PeopleOut,
+    Person,
     PokeIn,
     PokeOut,
     PostOut,
+    Profile,
+    ProfileOut,
     StatsOut,
     TickRow,
     TickStats,
@@ -56,7 +60,7 @@ assert_safe_to_spend()
 app = FastAPI(title="Character Social", docs_url=None, redoc_url=None)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=CONFIG.cors_origin_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -87,8 +91,12 @@ def require_admin(request: Request) -> None:
 def login(body: LoginIn, response: Response) -> Ok:
     if not hmac.compare_digest(body.password, CONFIG.site_password):
         raise HTTPException(status_code=401, detail="wrong password")
+    # "none" so the cookie survives a tunnelled API on a different origin than the web app.
+    # It costs the browser's cross-site CSRF protection, which the password gate does not
+    # replace — tighten to "lax" whenever the two are served same-site.
     response.set_cookie(
-        SESSION_COOKIE, _session_value(), httponly=True, samesite="lax", max_age=60 * 60 * 24 * 30
+        SESSION_COOKIE, _session_value(), httponly=True, samesite="none", secure=True,
+        max_age=60 * 60 * 24 * 30,
     )
     return Ok()
 
@@ -103,7 +111,7 @@ def health() -> Health:
 FEED_SQL = """
 SELECT p.id, p.body, p.created_at, p.like_count, p.reply_count, p.heat,
        p.parent_id, p.quote_of_id,
-       c.handle, c.name, c.avatar_seed, c.is_real_person,
+       c.handle, c.name, c.avatar_seed, c.avatar_url, c.is_real_person,
        h.title AS headline_title, h.url AS headline_url
   FROM posts p
   LEFT JOIN characters c ON c.id = p.character_id
@@ -116,10 +124,13 @@ SELECT p.id, p.body, p.created_at, p.like_count, p.reply_count, p.heat,
 
 THREAD_SQL = """
 SELECT p.id, p.body, p.created_at, p.like_count, p.reply_count, p.parent_id,
-       c.handle, c.name, c.avatar_seed, c.is_real_person,
+       coalesce(pc.handle, parent.author_human) AS replying_to,
+       c.handle, c.name, c.avatar_seed, c.avatar_url, c.is_real_person,
        h.title AS headline_title, h.url AS headline_url
   FROM posts p
   LEFT JOIN characters c ON c.id = p.character_id
+  LEFT JOIN posts parent ON parent.id = p.parent_id
+  LEFT JOIN characters pc ON pc.id = parent.character_id
   LEFT JOIN headlines h  ON h.id = p.headline_id
  WHERE coalesce(p.root_id, p.id) = (SELECT coalesce(root_id, id) FROM posts WHERE id = %s)
  ORDER BY p.created_at
@@ -134,10 +145,14 @@ def _post_out(row) -> PostOut:
         likeCount=row["like_count"],
         replyCount=row["reply_count"],
         parentId=str(row["parent_id"]) if row.get("parent_id") else None,
+        replyingTo=row.get("replying_to"),
         author=Author(
             handle=row.get("handle") or "guest",
             name=row.get("name") or "Guest",
             avatarSeed=row.get("avatar_seed") or "guest",
+            avatarUrl=row.get("avatar_url"),
+            # A human poke has no character row, so there is no profile to open.
+            isCharacter=row.get("handle") is not None,
             # Drives the parody badge. PLAN §12 calls the watermark the control that
             # makes a leaked screenshot a non-event.
             isRealPerson=bool(row.get("is_real_person")),
@@ -267,12 +282,12 @@ def world() -> WorldOut:
         )
         last = cur.fetchone()
         cur.execute("SELECT count(*) AS n FROM posts WHERE world_id = %s", (CONFIG.world_id,))
-        posts = cur.fetchone()["n"]
+        posts = db.one(cur)["n"]
         cur.execute(
             "SELECT count(*) AS n FROM characters WHERE status='active' AND world_id = %s",
             (CONFIG.world_id,),
         )
-        active = cur.fetchone()["n"]
+        active = db.one(cur)["n"]
     return WorldOut(
         tick=last["id"] if last else 0,
         lastTickAt=last["started_at"] if last else None,
@@ -287,7 +302,7 @@ def character_list() -> CharactersOut:
     with db.cursor() as cur:
         cur.execute(
             """
-            SELECT c.handle, c.name, c.avatar_seed, c.status,
+            SELECT c.handle, c.name, c.avatar_seed, c.avatar_url, c.status,
                    c.persona_card->>'bio' AS bio,
                    (c.engagement_profile->>'opens_per_day')::float AS opens_per_day,
                    (SELECT count(*) FROM posts p WHERE p.character_id = c.id) AS post_count,
@@ -301,6 +316,133 @@ def character_list() -> CharactersOut:
         return CharactersOut(
             characters=[CharacterOut.model_validate(dict(r)) for r in cur.fetchall()]
         )
+
+
+# ---------------------------------------------------------------------------- profile
+
+PROFILE_SQL = """
+SELECT c.handle, c.name, c.avatar_seed, c.avatar_url, c.is_real_person, c.status,
+       c.persona_card->>'bio' AS bio,
+       (c.engagement_profile->>'opens_per_day')::float AS opens_per_day,
+       coalesce(c.activated_at, c.created_at) AS joined_at,
+       (SELECT count(*) FROM posts p
+         WHERE p.character_id = c.id AND p.parent_id IS NULL)     AS post_count,
+       (SELECT count(*) FROM posts p
+         WHERE p.character_id = c.id AND p.parent_id IS NOT NULL) AS reply_count,
+       (SELECT coalesce(sum(p.like_count), 0) FROM posts p
+         WHERE p.character_id = c.id)                             AS likes_received,
+       (SELECT count(*) FROM follows f WHERE f.followee_id = c.id) AS follower_count,
+       (SELECT count(*) FROM follows f WHERE f.follower_id = c.id) AS following_count
+  FROM characters c
+ WHERE c.handle = %(handle)s AND c.world_id = %(world)s AND c.status <> 'draft'
+"""
+
+# One query for both tabs; the boolean picks which side of the parent_id split to return.
+PROFILE_POSTS_SQL = """
+SELECT p.id, p.body, p.created_at, p.like_count, p.reply_count, p.parent_id,
+       coalesce(pc.handle, parent.author_human) AS replying_to,
+       c.handle, c.name, c.avatar_seed, c.avatar_url, c.is_real_person,
+       h.title AS headline_title, h.url AS headline_url
+  FROM posts p
+  JOIN characters c ON c.id = p.character_id
+  LEFT JOIN posts parent  ON parent.id = p.parent_id
+  LEFT JOIN characters pc ON pc.id = parent.character_id
+  LEFT JOIN headlines h   ON h.id = p.headline_id
+ WHERE c.handle = %(handle)s AND p.world_id = %(world)s
+   AND (p.parent_id IS NULL) = %(top_level)s
+ ORDER BY p.created_at DESC
+ LIMIT %(limit)s
+"""
+
+
+@app.get("/api/profile/{handle}", response_model=ProfileOut, dependencies=[Depends(require_visitor)])
+def profile(handle: str, limit: int = 50) -> ProfileOut:
+    """Both tabs in one response. They come from the same rows and switching between them
+    shouldn't hit the network — the world only changes on a tick."""
+    handle = handle.lstrip("@").lower()
+    args = {"handle": handle, "world": CONFIG.world_id, "limit": min(limit, 100)}
+    with db.cursor() as cur:
+        cur.execute(PROFILE_SQL, args)
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="no such character")
+
+        cur.execute(PROFILE_POSTS_SQL, {**args, "top_level": True})
+        posts = [_post_out(r) for r in cur.fetchall()]
+        cur.execute(PROFILE_POSTS_SQL, {**args, "top_level": False})
+        replies = [_post_out(r) for r in cur.fetchall()]
+
+    return ProfileOut(
+        profile=Profile(
+            handle=row["handle"],
+            name=row["name"],
+            avatarSeed=row["avatar_seed"],
+            avatarUrl=row["avatar_url"],
+            isRealPerson=row["is_real_person"],
+            status=row["status"],
+            bio=row["bio"],
+            opensPerDay=row["opens_per_day"],
+            joinedAt=row["joined_at"],
+            postCount=row["post_count"],
+            replyCount=row["reply_count"],
+            likesReceived=row["likes_received"],
+            followerCount=row["follower_count"],
+            followingCount=row["following_count"],
+        ),
+        posts=posts,
+        replies=replies,
+    )
+
+
+# The two directions differ only in which side of the edge the profile sits on, so the
+# column names are the parameter — they are ours, never user input.
+FOLLOWS_SQL = """
+SELECT c.handle, c.name, c.avatar_seed, c.avatar_url, c.persona_card->>'bio' AS bio
+  FROM follows f
+  JOIN characters anchor ON anchor.id = f.{anchor}
+  JOIN characters c      ON c.id = f.{other}
+ WHERE anchor.handle = %(handle)s AND anchor.world_id = %(world)s AND c.status <> 'draft'
+ ORDER BY f.created_at DESC
+ LIMIT %(limit)s
+"""
+
+
+def _follows(handle: str, anchor: str, other: str, limit: int) -> PeopleOut:
+    with db.cursor() as cur:
+        cur.execute(
+            FOLLOWS_SQL.format(anchor=anchor, other=other),
+            {"handle": handle, "world": CONFIG.world_id, "limit": min(limit, 200)},
+        )
+        return PeopleOut(
+            people=[
+                Person(
+                    handle=r["handle"],
+                    name=r["name"],
+                    avatarSeed=r["avatar_seed"],
+                    avatarUrl=r["avatar_url"],
+                    bio=r["bio"],
+                )
+                for r in cur.fetchall()
+            ]
+        )
+
+
+@app.get(
+    "/api/profile/{handle}/followers",
+    response_model=PeopleOut,
+    dependencies=[Depends(require_visitor)],
+)
+def followers(handle: str, limit: int = 100) -> PeopleOut:
+    return _follows(handle, "followee_id", "follower_id", limit)
+
+
+@app.get(
+    "/api/profile/{handle}/following",
+    response_model=PeopleOut,
+    dependencies=[Depends(require_visitor)],
+)
+def following(handle: str, limit: int = 100) -> PeopleOut:
+    return _follows(handle, "follower_id", "followee_id", limit)
 
 
 # ------------------------------------------------------------------------------- poke
@@ -325,7 +467,7 @@ def poke(body: PokeIn) -> PokeOut:
             "SELECT count(*) AS n FROM posts "
             "WHERE author_human IS NOT NULL AND created_at > now() - interval '1 day'"
         )
-        if cur.fetchone()["n"] >= CONFIG.poke_daily_cap:
+        if db.one(cur)["n"] >= CONFIG.poke_daily_cap:
             raise HTTPException(status_code=429, detail="daily poke limit reached")
 
         cur.execute(
@@ -343,7 +485,7 @@ def poke(body: PokeIn) -> PokeOut:
             """,
             (CONFIG.world_id, display_name, clean, body.post_id, target["root"]),
         )
-        new_id = cur.fetchone()["id"]
+        new_id = db.one(cur)["id"]
         # A poke is a real child post, so the parent's rendered count must include it.
         cur.execute("UPDATE posts SET reply_count = reply_count + 1 WHERE id = %s", (body.post_id,))
         if target["character_id"]:
@@ -420,7 +562,7 @@ def admin_stats() -> StatsOut:
             """,
             {"w": CONFIG.world_id},
         )
-        totals = dict(cur.fetchone())
+        totals = dict(db.one(cur))
 
         cur.execute(
             "SELECT id, turns_sent, posts_written, news_share, started_at, error "
@@ -440,7 +582,7 @@ def admin_stats() -> StatsOut:
               FROM batches
             """
         )
-        usage = UsageOut.model_validate(dict(cur.fetchone()))
+        usage = UsageOut.model_validate(dict(db.one(cur)))
 
     return StatsOut(
         **totals,

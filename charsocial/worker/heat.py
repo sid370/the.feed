@@ -8,10 +8,13 @@ with none.
 Decay is what stops either from ossifying. Without it, the first two characters to clash
 lock the feed forever.
 """
+from charsocial import db
 from charsocial.config import CONFIG
 
 
-def bump_relation(cur, character_id, other_id, feeling_delta: int = 0, note: str | None = None) -> None:
+def bump_relation(
+    cur: db.Cursor, character_id, other_id, feeling_delta: int = 0, note: str | None = None
+) -> None:
     """`note` is the character's own read on the other person — deliberately their belief,
     not the truth. A written-down wrong belief is what lets a misunderstanding persist
     across ticks instead of resetting, which is the whole engine of a running joke."""
@@ -39,7 +42,7 @@ def bump_relation(cur, character_id, other_id, feeling_delta: int = 0, note: str
     )
 
 
-def bump_post(cur, post_id, count_reply: bool = True) -> None:
+def bump_post(cur: db.Cursor, post_id, count_reply: bool = True) -> None:
     """A quote raises attention but creates no child post, so it must not inflate
     reply_count — the UI renders that number literally."""
     if post_id is None:
@@ -55,7 +58,7 @@ def bump_post(cur, post_id, count_reply: bool = True) -> None:
         )
 
 
-def decay(cur) -> None:
+def decay(cur: db.Cursor) -> None:
     cur.execute("UPDATE relations SET heat = heat * %s WHERE heat > 0.01", (CONFIG.relation_heat_decay,))
     cur.execute("UPDATE relations SET heat = 0 WHERE heat <= 0.01")
     cur.execute(

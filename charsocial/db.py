@@ -1,9 +1,11 @@
 """Postgres access. Plain SQL on purpose — the scheduler is arithmetic you want to read."""
 import contextlib
+from collections.abc import Iterator
 from pathlib import Path
+from typing import LiteralString, cast
 
 import psycopg
-from psycopg.rows import dict_row
+from psycopg.rows import DictRow, dict_row
 
 from charsocial.config import CONFIG
 
@@ -12,23 +14,43 @@ MIGRATIONS = Path(__file__).resolve().parent.parent / "db" / "migrations"
 # Guards against overlapping cron invocations double-spending the budget.
 TICK_LOCK = 0x0C5A_71CB
 
+# Every connection here is dict_row. Saying so in the type is what lets a checker catch a
+# renamed column at `row["handle"]` instead of leaving every row an unchecked tuple.
+Cursor = psycopg.Cursor[DictRow]
 
-def connect() -> psycopg.Connection:
-    return psycopg.connect(CONFIG.database_url, row_factory=dict_row, autocommit=False)
+
+def connect() -> psycopg.Connection[DictRow]:
+    # Parameterised rather than the bare psycopg.connect(): that one is typed as returning
+    # tuple rows whatever row_factory says, which is what made every row["col"] unchecked.
+    return psycopg.Connection[DictRow].connect(
+        CONFIG.database_url, row_factory=dict_row, autocommit=False
+    )
 
 
 @contextlib.contextmanager
-def cursor():
+def cursor() -> Iterator[Cursor]:
     with connect() as conn, conn.cursor() as cur:
         yield cur
         conn.commit()
 
 
+def one(cur: Cursor) -> DictRow:
+    """fetchone() for a query that cannot return zero rows — an aggregate, or RETURNING.
+
+    Names the impossible case where it happens instead of letting it surface as a None
+    subscript further down.
+    """
+    row = cur.fetchone()
+    if row is None:
+        raise RuntimeError("expected a row, got none")
+    return row
+
+
 @contextlib.contextmanager
-def tick_lock(cur) -> bool:
+def tick_lock(cur: Cursor) -> Iterator[bool]:
     """Yields True if this process owns the tick, False if another one already does."""
     cur.execute("SELECT pg_try_advisory_lock(%s) AS got", (TICK_LOCK,))
-    got = cur.fetchone()["got"]
+    got = one(cur)["got"]
     try:
         yield got
     finally:
@@ -56,10 +78,12 @@ def migrate() -> None:
             # 001 predates this table; adopt an existing schema instead of re-running it.
             if path.name.startswith("001_"):
                 cur.execute("SELECT to_regclass('public.characters') IS NOT NULL AS ready")
-                if cur.fetchone()["ready"]:
+                if one(cur)["ready"]:
                     cur.execute("INSERT INTO schema_migrations (name) VALUES (%s)", (path.name,))
                     continue
-            cur.execute(path.read_text())
+            # psycopg demands a literal query string to make injection hard to write by
+            # accident. A migration is a file in this repo, not input.
+            cur.execute(cast(LiteralString, path.read_text()))
             cur.execute("INSERT INTO schema_migrations (name) VALUES (%s)", (path.name,))
 
 

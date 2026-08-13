@@ -37,7 +37,7 @@ def run(seed: int | None = None) -> dict:
                 "INSERT INTO ticks (world_id, budget) VALUES (%s, %s) RETURNING id",
                 (CONFIG.world_id, CONFIG.tick_budget),
             )
-            tick_id = cur.fetchone()["id"]
+            tick_id = db.one(cur)["id"]
             conn.commit()
 
             try:

@@ -13,7 +13,10 @@ import json
 import random
 import re
 import uuid
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
+
+if TYPE_CHECKING:  # the runtime import stays lazy so offline mode needs no dependency
+    from anthropic.types import TextBlockParam
 
 from charsocial.config import CONFIG
 from charsocial.models import Collected, Submission, Usage
@@ -122,13 +125,16 @@ class AnthropicProvider:
         for model in {t.get("model") or CONFIG.turn_model for t in turns}:
             self._warm_cache(system, model)
 
+        # prompts.system_blocks() builds exactly this shape; the provider interface stays
+        # plain dicts so the offline and Kimi providers don't import the Anthropic types.
+        blocks = cast("list[TextBlockParam]", system)
         requests = [
             Request(
                 custom_id=turn["custom_id"],
                 params=MessageCreateParamsNonStreaming(
                     model=turn.get("model") or CONFIG.turn_model,
                     max_tokens=MAX_TURN_TOKENS,
-                    system=system,
+                    system=blocks,
                     # Sonnet 5 runs adaptive thinking by DEFAULT. A short in-character
                     # decision does not benefit from it, and leaving it on multiplies
                     # output tokens several-fold — the whole budget assumes it is off.
@@ -160,7 +166,7 @@ class AnthropicProvider:
             self.client.messages.create(
                 model=model,
                 max_tokens=0,
-                system=system,
+                system=cast("list[TextBlockParam]", system),
                 thinking={"type": "disabled"},
                 messages=[{"role": "user", "content": "warm"}],
             )

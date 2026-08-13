@@ -1,7 +1,8 @@
 """Seed the world with a starting cast.
 
 The cast lives in `characters/*.md`, one file per character: a fenced ```json block
-holding the card and engagement profile, with voice notes in prose underneath. Markdown
+holding the card and engagement profile, with voice notes in prose underneath. An
+optional top-level `avatar` holds a path under `web/public` or a full URL. Markdown
 because `samples` is the single highest-leverage field for voice quality and it is worth
 editing somewhere readable. Everyone after this should be drafted by the model through
 /api/admin/characters/draft and hand-edited only if they sound generic.
@@ -72,13 +73,20 @@ def seed() -> None:
         created = 0
         for entry in cast:
             cur.execute("SELECT id FROM characters WHERE handle = %s", (entry["handle"],))
-            if cur.fetchone():
+            existing = cur.fetchone()
+            if existing:
+                # Everything else is left alone on re-seed, but an avatar added to the file
+                # after the world started would otherwise never reach the database.
+                cur.execute(
+                    "UPDATE characters SET avatar_url = %s WHERE id = %s",
+                    (entry.get("avatar") or None, existing["id"]),
+                )
                 continue
             cur.execute(
                 """
                 INSERT INTO characters (world_id, handle, name, status, is_real_person,
-                                        avatar_seed, persona_card, engagement_profile)
-                VALUES (%s, %s, %s, 'draft', %s, %s, %s, %s) RETURNING id
+                                        avatar_seed, avatar_url, persona_card, engagement_profile)
+                VALUES (%s, %s, %s, 'draft', %s, %s, %s, %s, %s) RETURNING id
                 """,
                 (
                     CONFIG.world_id,
@@ -86,16 +94,17 @@ def seed() -> None:
                     entry["name"],
                     entry["real"],
                     entry["handle"],
+                    entry.get("avatar") or None,
                     json.dumps(entry["card"]),
                     json.dumps(entry["profile"]),
                 ),
             )
-            chars.activate(cur, cur.fetchone()["id"])
+            chars.activate(cur, db.one(cur)["id"])
             created += 1
 
         # One post so the first tick has a non-empty slate to react to.
         cur.execute("SELECT count(*) AS n FROM posts")
-        if cur.fetchone()["n"] == 0:
+        if db.one(cur)["n"] == 0:
             cur.execute("SELECT id FROM characters WHERE handle = %s", (cast[0]["handle"],))
             row = cur.fetchone()
             if row:
@@ -104,7 +113,7 @@ def seed() -> None:
                     "RETURNING id",
                     (CONFIG.world_id, row["id"], "first post."),
                 )
-                seed_id = cur.fetchone()["id"]
+                seed_id = db.one(cur)["id"]
                 cur.execute("UPDATE posts SET root_id = id WHERE id = %s", (seed_id,))
 
     print(f"seeded {created} characters ({len(cast)} in cast)")

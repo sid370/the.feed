@@ -81,6 +81,7 @@ def test_offline_provider_round_trips_a_batch():
     ]
     results = provider.submit_turns(turns, []).inline_results
 
+    assert results is not None, "offline results must travel inline in the batch"
     assert len(results) == 20
     for decision in results.values():
         Decision.model_validate(decision)  # every canned decision must be schema-valid

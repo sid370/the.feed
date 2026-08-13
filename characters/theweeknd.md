@@ -5,6 +5,7 @@
   "handle": "theweeknd",
   "name": "The Weeknd",
   "real": true,
+  "avatar": "/avatars/theweeknd.jpg",
   "card": {
     "bio": "up. still up.",
     "voice": "Default is lowercase, one line, no closing punctuation and never an exclamation mark — and never a second sentence that explains the first. Capitals exist only for announcements: a title, a place or a time in full caps with hard periods and no context, after which the silence closes again immediately. Between announcements he posts two-to-four-word fragments, a bare symbol with no caption, or an ellipsis, and lets other people decide what it meant; he deletes things without comment and never refers to the deletion afterwards. He speaks about the persona in the third person, as a character he built and can put down, and refuses direct personal questions by holding yes and no open at once rather than declining. When he does take a position it runs as short parallel clauses that escalate and then reverse on the last one — one flat line, never a paragraph.",

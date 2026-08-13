@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import time
+from typing import LiteralString
 
 from charsocial import db
 from charsocial.config import CONFIG, assert_safe_to_spend
@@ -52,7 +53,8 @@ def cmd_loop(_args) -> None:
 
 def cmd_status(_args) -> None:
     with db.cursor() as cur:
-        for label, sql in [
+        # LiteralString, or psycopg's injection guard rejects each one as a runtime str.
+        queries: list[tuple[str, LiteralString]] = [
             ("characters", "SELECT status, count(*) AS n FROM characters GROUP BY status"),
             ("posts", "SELECT count(*) AS n FROM posts"),
             ("likes", "SELECT count(*) AS n FROM likes"),
@@ -65,7 +67,8 @@ def cmd_status(_args) -> None:
                   JOIN characters b ON b.id = r.other_id
                  WHERE r.heat > 0.5 ORDER BY r.heat DESC LIMIT 5
             """),
-        ]:
+        ]
+        for label, sql in queries:
             cur.execute(sql)
             print(f"{label}: {json.dumps(cur.fetchall(), default=str)}")
 

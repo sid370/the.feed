@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     kimi_api_key: str | None = None
 
     # "offline" runs the whole tick with a canned provider — no key, no spend.
-    llm_provider: str = Field("offline", pattern="^(offline|anthropic|kimi)$")
+    llm_provider: str = Field(default="offline", pattern="^(offline|anthropic|kimi)$")
 
     turn_model: str = "claude-sonnet-5"
     utility_model: str = "claude-sonnet-5"
@@ -35,53 +35,61 @@ class Settings(BaseSettings):
     # tick_interval_minutes is also a HOSTING dial: serverless Postgres suspends after
     # ~5 idle minutes, so anything under ~10 keeps the database awake permanently and
     # costs more in compute-hours than the extra turns cost in tokens. See PLAN.md §10a.
-    tick_budget: int = Field(8, ge=1, le=200)
-    tick_interval_minutes: int = Field(30, ge=1, le=1440)
+    tick_budget: int = Field(default=8, ge=1, le=200)
+    tick_interval_minutes: int = Field(default=30, ge=1, le=1440)
 
-    slate_size: int = Field(5, ge=1, le=25)
+    slate_size: int = Field(default=5, ge=1, le=25)
     # How many slate slots replies-to-me may take. Uncapped, a popular character fills
     # every slot with replies and can never start a new topic again.
-    slate_notification_cap: int = Field(3, ge=0, le=25)
+    slate_notification_cap: int = Field(default=3, ge=0, le=25)
 
     # Heat: rises on interaction, decays every tick so old feuds cool off.
-    relation_heat_gain: float = Field(1.0, gt=0)
-    relation_heat_decay: float = Field(0.90, gt=0, lt=1)
-    relation_heat_ceiling: float = Field(12.0, gt=0)
-    post_heat_gain: float = Field(1.0, gt=0)
-    post_heat_decay: float = Field(0.80, gt=0, lt=1)
+    relation_heat_gain: float = Field(default=1.0, gt=0)
+    relation_heat_decay: float = Field(default=0.90, gt=0, lt=1)
+    relation_heat_ceiling: float = Field(default=12.0, gt=0)
+    post_heat_gain: float = Field(default=1.0, gt=0)
+    post_heat_decay: float = Field(default=0.80, gt=0, lt=1)
 
-    memory_notes_in_context: int = Field(12, ge=0, le=100)
-    own_posts_in_context: int = Field(5, ge=0, le=50)
-    relations_in_context: int = Field(5, ge=0, le=50)
+    memory_notes_in_context: int = Field(default=12, ge=0, le=100)
+    own_posts_in_context: int = Field(default=5, ge=0, le=50)
+    relations_in_context: int = Field(default=5, ge=0, le=50)
 
     # Free engagement — arithmetic only, never an LLM call.
     # likes_per_tick is a big-world ceiling. On its own it does not scale down: in a small
     # cast it exceeds the number of distinct (post, liker) pairs several times over, so
     # every character likes every post. likes_per_post is what sets the actual volume.
-    likes_per_tick: int = Field(400, ge=0)
-    likes_per_post: float = Field(1.5, ge=0)
-    follows_per_tick: int = Field(6, ge=0)
+    likes_per_tick: int = Field(default=400, ge=0)
+    likes_per_post: float = Field(default=1.5, ge=0)
+    follows_per_tick: int = Field(default=6, ge=0)
 
     # Characters notice their own numbers. Capped per tick: "blowing up" has to mean
     # unusual, and at a small cast size everything saturates.
-    blowup_floor: int = Field(3, ge=1)
-    flop_ticks: int = Field(3, ge=1)
-    vanity_per_tick: int = Field(2, ge=0, le=50)
+    blowup_floor: int = Field(default=3, ge=1)
+    flop_ticks: int = Field(default=3, ge=1)
+    vanity_per_tick: int = Field(default=2, ge=0, le=50)
 
     # Varying the TASK breaks voice sameness far more cheaply than varying the topic.
-    intent_rate: float = Field(0.4, ge=0, le=1)
+    intent_rate: float = Field(default=0.4, ge=0, le=1)
 
     # Off by default: phase 1 proves characters form relationships with no news at all.
     news_enabled: bool = False
-    headlines_per_tick: int = Field(20, ge=1, le=100)
-    news_share_floor: float = Field(0.15, ge=0, le=1)
-    news_share_ceiling: float = Field(0.70, ge=0, le=1)
+    headlines_per_tick: int = Field(default=20, ge=1, le=100)
+    news_share_floor: float = Field(default=0.15, ge=0, le=1)
+    news_share_ceiling: float = Field(default=0.70, ge=0, le=1)
 
     # Human pokes are the only synchronous spend, so they get their own hard cap.
-    poke_daily_cap: int = Field(100, ge=0)
+    poke_daily_cap: int = Field(default=100, ge=0)
 
     site_password: str = "letmein"
     admin_token: str = "dev-admin-token"
+
+    # Comma-separated browser origins allowed to call the API, for when the web app is
+    # served from somewhere other than localhost (a tunnel, a phone on the LAN).
+    cors_origins: str = "http://localhost:3000"
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
     @model_validator(mode="after")
     def _check_ranges(self) -> "Settings":
@@ -144,10 +152,43 @@ INTENT_DECK = [
 # Restricted on purpose: tragedy is the most viral category in general news, and a
 # character riffing on it is the failure mode that matters. Source restriction is the
 # primary control; the classifier is defence in depth.
+#
+# Breadth is fine, general news is not: every feed here is tech, entertainment, sports or
+# science, which is the restriction itself. No wire services and no front pages.
 RSS_FEEDS = [
     ("The Verge", "https://www.theverge.com/rss/index.xml"),
     ("Ars Technica", "https://feeds.arstechnica.com/arstechnica/technology-lab"),
+    ("TechCrunch", "https://techcrunch.com/feed/"),
+    ("Engadget", "https://www.engadget.com/rss.xml"),
+    ("Wired", "https://www.wired.com/feed/rss"),
+    ("Hacker News", "https://hnrss.org/frontpage"),
+    ("MIT Tech Review", "https://www.technologyreview.com/feed/"),
+    ("The Register", "https://www.theregister.com/headlines.atom"),
+    ("9to5Mac", "https://9to5mac.com/feed/"),
+    ("VentureBeat AI", "https://venturebeat.com/category/ai/feed/"),
+    ("Hugging Face", "https://huggingface.co/blog/feed.xml"),
     ("Variety", "https://variety.com/feed/"),
+    ("Hollywood Reporter", "https://www.hollywoodreporter.com/feed/"),
+    ("Deadline", "https://deadline.com/feed/"),
+    ("Billboard", "https://www.billboard.com/feed/"),
+    ("Pitchfork", "https://pitchfork.com/feed/feed-news/rss"),
+    ("Rolling Stone", "https://www.rollingstone.com/feed/"),
+    ("Consequence", "https://consequence.net/feed/"),
+    ("Stereogum", "https://www.stereogum.com/feed/"),
+    ("Polygon", "https://www.polygon.com/rss/index.xml"),
+    ("IGN", "https://feeds.ign.com/ign/all"),
     ("ESPN", "https://www.espn.com/espn/rss/news"),
+    ("ESPN NBA", "https://www.espn.com/espn/rss/nba/news"),
+    ("ESPN NFL", "https://www.espn.com/espn/rss/nfl/news"),
+    ("BBC Sport", "https://feeds.bbci.co.uk/sport/rss.xml"),
+    ("Sky Sports", "https://www.skysports.com/rss/12040"),
+    ("CBS Sports", "https://www.cbssports.com/rss/headlines/"),
     ("Science Daily", "https://www.sciencedaily.com/rss/top/science.xml"),
+    ("Nature", "https://www.nature.com/nature.rss"),
+    ("Phys.org", "https://phys.org/rss-feed/"),
+    ("NASA", "https://www.nasa.gov/rss/dyn/breaking_news.rss"),
+    ("Quanta", "https://api.quantamagazine.org/feed/"),
+    ("New Scientist", "https://www.newscientist.com/feed/home/"),
+    ("Live Science", "https://www.livescience.com/feeds/all"),
+    ("Space.com", "https://www.space.com/feeds/all"),
 ]
