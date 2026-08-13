@@ -528,11 +528,36 @@ above stops mattering.
 ### Why not Cloudflare Workers for the worker
 
 Asked directly, so: **Workers is the wrong runtime for the tick and the right one for the
-frontend.** The tick needs `psycopg`, `feedparser`, and the Anthropic SDK, plus a
-long-lived Postgres connection and a transaction held across a batch collect. Workers is
-JS/WASM with CPU-time limits and no native Postgres sockets; Python Workers exist but the
-package ecosystem is not there. Cloudflare **Pages** for the Next.js frontend is genuinely
-excellent and free — use it there.
+frontend.** Cloudflare **Pages** for the Next.js frontend is genuinely excellent and free —
+use it there.
+
+For the tick, three specific blockers, none of which is "sockets":
+
+- **Python Workers run on Pyodide** and take pure-Python or PyEmscripten packages. `psycopg`
+  is a native extension and is not available, and `feedparser` and the Anthropic SDK are the
+  same story to varying degrees. This is a TypeScript rewrite, not a port.
+- **Free-tier cron gives 10 ms of CPU per invocation.** CPU time excludes I/O waits, so it is
+  less brutal than it sounds, but parsing a batch of decisions and writing them is not a 10 ms
+  job. The paid plan raises it to 30s for sub-hourly schedules, at which point it costs more
+  than the Fly box it would replace.
+- **Cron triggers are never retried** — a run that throws or exceeds CPU is simply gone. The
+  design tolerates a missed tick, but silent non-retry with no alerting is how you find out in
+  March that the world stopped in January.
+
+**Correction to an earlier version of this document:** it claimed Workers had "no native
+Postgres sockets." That is out of date — the `connect()` TCP socket API exists and Hyperdrive
+adds pooling in front of it. Workers can reach Postgres fine. The reasons above are the real
+ones.
+
+**Workers would also not help with state, which is the usual reason people ask.** Workers are
+stateless; you would reach for Durable Objects, KV or D1. But Postgres already owns the entire
+world here, deliberately — see §2, where the same argument rejects agent frameworks. A second
+store for state Postgres already holds correctly buys nothing, costs debuggability, and does
+not move the bill, because cost is linear in turns per day and nothing else. Workers solve
+concurrency at the edge; this design is 48 invocations a day behind a cacheable read path.
+
+**[DEPLOY.md](./DEPLOY.md) is the runbook** — the concrete steps, DNS records, secrets and
+the Neon-vs-Supabase call for the actual deployment.
 
 ### Also rejected
 
@@ -540,8 +565,10 @@ excellent and free — use it there.
   which quadruples your hosting to schedule a script. Use Vercel for the frontend only.
 - **Render for the worker.** The free tier spins down and has no free cron; the paid Starter
   service costs more than Fly's equivalent box.
-- **Supabase over Neon.** Fine either way, but Supabase's free project pauses after a week
-  of inactivity, and a demo you show occasionally is exactly the thing that trips it.
+- **Supabase over Neon.** Fine either way for the database itself, but Supabase's free plan
+  *pauses the project* after one week of inactivity — tightened in Feb 2026 — and it needs a
+  manual unpause from the dashboard. A demo you link and then don't open for ten days is
+  exactly the thing that trips it; Neon's scale-to-zero resumes itself in about a second.
 - **A managed queue.** The `batches` table is the queue. Adding SQS/Redis to a system that
   processes 8 items twice an hour is pure overhead.
 
