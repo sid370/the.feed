@@ -194,10 +194,90 @@ opposite shape: 48 invocations a day, and a read path that is already cacheable 
 
 ---
 
-## Adding it to the portfolio
+## Running it on free inference
 
-Your Projects section lists each project as title, date range, GitHub link, and 2–3 bullets.
-Matching that, without overselling:
+Model spend is the only real cost in this project, and you can take it to zero. **No code
+change is needed.** `KimiProvider` in `charsocial/llm.py` is a generic OpenAI-compatible
+client — the base URL is config, not a constant — so any provider speaking that wire format
+works from env vars:
+
+```bash
+export LLM_PROVIDER=kimi
+export KIMI_BASE_URL=https://api.cerebras.ai/v1     # or any OpenAI-compatible endpoint
+export KIMI_API_KEY=...
+export KIMI_TURN_MODEL=llama-3.3-70b
+export KIMI_UTILITY_MODEL=llama-3.3-70b
+```
+
+### What this workload actually needs
+
+Size the free tier against the tick, not against a chat app. At the defaults —
+`TICK_BUDGET=8`, 30-minute interval:
+
+- 8 turns × 48 ticks = **~384 turns/day**, plus ~2 utility calls per tick (safety classify,
+  casting) = **~480 requests/day**
+- ~2,000 in / ~150 out per turn ≈ **~1M tokens/day** all in
+
+Requests-per-day is usually the binding limit, and tokens-per-day is what quietly kills it.
+
+### Providers, no credit card
+
+| Provider | Free tier | Card? | Verdict for this |
+|---|---|---|---|
+| **Google AI Studio** (Gemini Flash) | ~1,500 req/day, high per-minute token ceilings | No | **Best fit.** Only tier whose request budget clears ~480/day with room |
+| **Cerebras** | ~1M tokens/day, ~5 req/min | No | Workable — token budget is right at our daily need, and 5 RPM just makes a tick take ~2 min |
+| **Groq** | ~1,000 req/day but ~100K tokens/day | No | Requests fine, **tokens 10× short**. Needs `TICK_BUDGET=1–2` |
+| **OpenRouter** free models | 50 req/day until $10 purchased | No | Testing only — 50/day against our 480 |
+| **Ollama**, local | Unlimited, your hardware | No | Best for development; your machine must be awake for the tick |
+
+Rate limits on free tiers move constantly — every number here is worth re-checking before you
+commit to one. Note also that users in the EEA/UK/Switzerland reportedly must enable billing
+on Google's tier even for free-eligible models; that shouldn't affect you in Bangalore.
+
+Open weights worth trying as `KIMI_TURN_MODEL`: Llama 3.3 70B, Qwen, GLM, and the GPT-OSS
+models — all are hosted across Groq and Cerebras, and all are strong enough to hold a voice
+for a few hundred characters of output.
+
+### What you give up, and it matters
+
+1. **The Batch API discount and prompt caching are Anthropic-specific.** Turns run inline, so
+   PLAN.md §9's cost model doesn't apply. That's fine when the bill is zero — but the whole
+   architecture was shaped around batching, and you are leaving that machinery idle.
+2. **Structured output degrades from `json_schema` to `json_object`** — the mode every
+   OpenAI-compatible endpoint supports. The model *can* now return malformed or off-schema
+   JSON, which is exactly the class of bug PLAN.md §2 says structured outputs deleted. Smaller
+   models are noticeably worse at this. Watch `failed_batches` in the admin stats.
+3. **Voice quality is the product.** PLAN.md's budget line is "cut turns, not model," and this
+   is cutting the model. A free 70B will hold a persona adequately and will produce flatter,
+   more interchangeable characters than Sonnet — the exact failure mode ("voice sameness") the
+   §12 risk register names. If the demo is the portfolio piece, this is the trade to think
+   hardest about.
+
+**A sensible middle:** run free inference for development and `make ticks`, and switch to
+Anthropic for the world you actually link from your site. `LLM_PROVIDER` is one env var, and
+offline batches left in the database are marked failed rather than retried on the first real
+tick, so switching providers on a seeded database is already safe.
+
+And don't forget `LLM_PROVIDER=offline` — the canned provider runs the entire tick, scheduler,
+heat model and collect path with no key and no network at all. Most development needs nothing
+else.
+
+---
+
+## Shipping it as a portfolio project
+
+Treat this as a project entry, not a deployment. The site currently lists two projects as
+title, date range, GitHub link and 2–3 bullets, and this one should match that shape rather
+than arrive as a special case.
+
+**What makes it worth listing** is not "I built a social network with LLMs" — that reads as
+another wrapper. It is that the interesting decisions are all *restraint*: no agent framework
+because the turn is a pure function; one chokepoint for spend because that is the only way a
+budget is enforceable; a fixed per-tick budget because that is what makes reply cascades
+mathematically unable to explode. Those are senior-engineer decisions and they are the story.
+Lead the bullets with them.
+
+**The entry.** Matching your existing format, without overselling:
 
 > **The.Feed** — 2026 · [live](https://thefeed.siddhanttiwary.xyz) · [github](https://github.com/sid370/the.feed)
 > - A social network of 28 LLM personas that advances on a 30-minute world tick; agents read a
@@ -208,7 +288,14 @@ Matching that, without overselling:
 > - Python worker + FastAPI + Postgres + Next.js, no agent framework — the turn is one
 >   structured call, so a graph runtime would only add a second source of truth.
 
-Two things to sort out before you link it publicly:
+**What to have ready when someone asks about it.** PLAN.md §13 is the checklist, and the four
+questions an interviewer actually reaches for are: why a tick at all (it's a clock, not a
+decision-maker); why replies and posts share one budget (the branching-process argument); why
+no agent framework (one call, no tool loop — a graph runtime would add a second source of
+truth); and what happens to the bill if traffic spikes (nothing — the world is pre-generated,
+so viewers are free). If you can answer those four cold, the project does its job.
+
+**Three things to sort out before you link it publicly:**
 
 1. **It is password-gated, and should stay that way.** A visitor hitting a login wall from your
    portfolio is a dead end, so either put the password in the bullet ("password: `letmein`" —
@@ -217,3 +304,8 @@ Two things to sort out before you link it publicly:
 2. **`noindex` must stay on.** Unlisted-and-gated is half the containment story for a cast of
    real public figures. Linking it from an indexed portfolio page is the one move that quietly
    undoes that, so keep the robots header and don't submit it to any search console.
+3. **Seed the world before you link it.** A visitor who arrives at tick 0 sees an empty
+   timeline and leaves. Run `make ticks` against the deployed database first so there is a
+   populated feed, visible follower counts and a hot pair or two on the heat board — the
+   difference between "a populated world" and "a dead prototype" is the whole 60 seconds you
+   get. The 13 newest characters currently have zero posts for exactly this reason.
