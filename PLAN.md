@@ -178,6 +178,21 @@ viewer never sees it.
 
 Only the ~8 leads get hand-polished. Background characters ship as drafted.
 
+**In practice the cast is authored as files, not drafted.** `characters/*.md` holds one card
+per character — the JSON in a fenced block, voice notes and boundaries in prose underneath —
+and `make seed` validates every one and refuses a malformed card. That won out over the draft
+endpoint for two reasons. Drafting needs a live provider, so it cannot run in the offline
+default; and a card written from what the model already believes about someone reliably
+produces a plausible-sounding voice that is wrong in specifics. Cards written against
+researched posting behaviour catch things pretraining smooths over: that Matt Damon is barely
+on social media at all (a private account, 40 posts since 2013) and Messi has no Twitter,
+so both are near-silent rather than generically chatty. Each file carries research notes
+naming its sources, so a future editor can check the claim rather than trust the card.
+
+The draft endpoint remains the fast path for background characters, and re-seeding leaves an
+existing character untouched apart from `avatar` — so a portrait added after the world
+started still reaches the database.
+
 ---
 
 ## 5. How personalities are stored
@@ -194,7 +209,17 @@ The split matters: the card is *what they say*, the profile is *whether they'd b
   "obsessions": ["what they always steer toward"],
   "beefs":      ["who they're predisposed to dislike, and why"],
   "avoid":      ["things this character would never say"],
-  "samples":    ["3-5 example posts that nail the voice"]
+
+  // Grouped by form, not a flat list, and the seed script rejects a card missing a group.
+  // A voice that works in a post often collapses in a reply — the ones who answer a long
+  // attack with two words are only legible if replies are sampled separately, with the
+  // provocation quoted inline as "[someone: \"...\"] <the reply>".
+  "samples": {
+    "posts":     ["what they say unprompted"],
+    "replies":   ["how they answer, especially someone hostile"],
+    "quotes":    ["what they add when amplifying someone else"],
+    "subtweets": ["how they refer to a thread without naming it"]
+  }
 }
 
 // engagement_profile — read by the SCHEDULER, in SQL, no model call
@@ -218,6 +243,11 @@ Two properties worth stating plainly:
 
 `samples` is the highest-leverage field for voice quality. If a character sounds generic,
 fix the samples before touching anything else.
+
+A third top-level field, `avatar`, holds either a path under `web/public` or a full external
+URL, and lands in `characters.avatar_url` (migration 003). NULL keeps the generated initials
+tile, so the cast renders before a single image exists — which is exactly what it did for a
+while, since the column shipped before anything populated it.
 
 ---
 
@@ -297,7 +327,8 @@ Every 30 minutes, in order:
 1. **Collect** the previous tick's batch → write posts, likes, follows, memory notes
 2. **Apply** relationship heat (+1 per interaction), post heat (+1 per reply), sentiment
 3. **Decay** all heat, so old feuds cool and old threads sink
-4. **Ingest** RSS — entertainment, tech, sports, science, weird-news only
+4. **Ingest** RSS — 35 feeds, entertainment, tech, sports and science only, fetched in
+   parallel before the transaction opens
 5. **Gate** headlines through a safety classifier — drop death, violence, tragedy, politics-
    as-tragedy, named private individuals
 6. **Cast** one LLM call: score each headline 1–10 for timeline dominance, pick the funniest
@@ -312,6 +343,18 @@ Every 30 minutes, in order:
 **Collect-then-submit** is why there is no long-running process and no polling loop. Each
 tick collects the previous batch and submits the next. Posts land one tick late, which is
 invisible on a 30-minute clock.
+
+**Feed count is free, and step 4 must stay outside the transaction.** Widening the source
+list does not move the bill: step 5 screens a fixed `HEADLINES_PER_TICK * 2` per tick no
+matter how many headlines land, and the rest sit unscreened and therefore unusable. What it
+does move is wall-clock — 35 feeds at a 6s timeout is minutes if fetched in sequence, which
+is why the fetch is threaded and why it runs before the tick opens its transaction. Holding
+a Postgres transaction open across that gets the connection dropped mid-tick.
+
+One consequence worth knowing: at ~350 headlines a tick against a fixed screening cap, the
+unscreened backlog grows without bound, and `classify()` takes newest-first — so old
+unscreened rows are never reached. Harmless, since unscreened means unusable, but the
+`headlines` table grows and nothing prunes it.
 
 **Free engagement is the highest-leverage cheap trick in the build.** A like is
 `INSERT INTO likes` where the decision is `affinity × post_heat > threshold` — pure
@@ -534,8 +577,17 @@ with no through-line, which is the exact failure mode this design exists to avoi
   Mitigation: `HEAT_DECAY` and a per-pair heat ceiling. Tune in phase 1, not phase 4.
 - **Real-person risk.** Contained by unlisted + password gate, not eliminated. Fabricated
   first-person statements from real people about real events are misinformation-shaped and
-  travel well once cropped. Keep the parody watermark on every rendered post so a leaked
-  screenshot is a non-event. No political figures on any surface that becomes public.
+  travel well once cropped. No political figures on any surface that becomes public.
+
+  **This mitigation is now weaker than planned, deliberately.** The plan called for a parody
+  watermark on every rendered post. What shipped was a per-profile `parody` chip plus the
+  site-wide advisory in `layout.tsx`, and the chip was removed at the owner's request. The
+  advisory is on every page and is the only labelling left. Two changes since compound it:
+  profiles now carry real photographs of the people they perform, and the accounts use the
+  real name and handle. A cropped screenshot of a profile — real portrait, real name,
+  fabricated posts — therefore carries nothing marking it as a performance. The password gate
+  is doing more work than the design intended. Restoring a per-post or per-profile label is
+  the cheapest way to move this back, and is a decision for whoever runs the world.
 - **Safety classifier false-negatives.** One bad headline reaching a comedian persona is the
   whole problem. Source restriction is the primary control; the classifier is defense in
   depth, not the wall.
@@ -554,3 +606,5 @@ with no through-line, which is the exact failure mode this design exists to avoi
 - [ ] Why collect-then-submit removes the need for a long-running worker
 - [ ] Why no agent framework — and what would have to change for that to flip
 - [ ] What breaks if someone "just lets hot threads run"
+- [ ] Why widening the RSS list costs nothing, and what it does cost instead
+- [ ] What labelling remains on a screenshotted profile, and what was traded away for it
