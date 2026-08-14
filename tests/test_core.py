@@ -10,6 +10,7 @@ from charsocial.llm import OfflineProvider
 from charsocial.prompts import WORLD_RULES, system_blocks, turn_prompt
 from charsocial.models import ActingCharacter, RelationView, SlateItem, TurnContext
 from charsocial.schemas import Decision, json_schema
+from charsocial.worker import scheduler
 from charsocial.worker.news import _share
 
 
@@ -67,6 +68,73 @@ def test_turn_prompt_includes_memory_and_slate():
     assert "hostile" in prompt
     assert "id=p1" in prompt
     assert "scrolling past is a normal outcome" in prompt
+
+
+def _candidate(post_id, author, root, score):
+    return {"id": post_id, "author_id": author, "root": root, "rank_score": score}
+
+
+def test_slate_takes_one_branch_per_conversation():
+    """Three replies from one argument is how a character answers the same point three
+    times. X's own pipeline dedupes conversations for the same reason."""
+    rows = [
+        _candidate("a", "kim", "thread1", 9.0),
+        _candidate("b", "trump", "thread1", 8.0),
+        _candidate("c", "drake", "thread2", 1.0),
+    ]
+    picked = scheduler._select(rows, 3)
+    assert [r["id"] for r in picked] == ["a", "c"]
+
+
+def test_slate_decays_repeat_authors():
+    """The loudest character had 139 posts in two days and could otherwise own the slate."""
+    rows = [
+        _candidate("a", "kim", "t1", 10.0),
+        _candidate("b", "kim", "t2", 9.0),
+        _candidate("c", "drake", "t3", 6.0),
+    ]
+    picked = scheduler._select(rows, 2)
+    # 9.0 x 0.625 falls under drake's 6.0, so the second slot changes hands.
+    assert [r["author_id"] for r in picked] == ["kim", "drake"]
+
+
+def test_author_diversity_never_falls_below_the_floor():
+    """Bare decay^k banishes a repeat author outright; home-mixer keeps a floor so a good
+    enough post from an author already on the slate can still earn a place."""
+    assert scheduler._diversity_multiplier(0) == pytest.approx(1.0)
+    assert scheduler._diversity_multiplier(1) == pytest.approx(0.625)
+    assert scheduler._diversity_multiplier(50) > CONFIG.author_floor - 1e-9
+
+
+def test_generic_constructions_are_banned_by_name():
+    """Naming the exact failing string beats describing it — the technique xAI's own @grok
+    prompt uses. These three shapes appeared across 5-6 different characters, which is what
+    made the whole feed sound like one writer."""
+    assert "is not the same as" in WORLD_RULES
+    assert "that's the whole point" in WORLD_RULES
+    assert "<policy>" in WORLD_RULES and "</policy>" in WORLD_RULES
+
+
+def test_tics_are_rationed_rather_than_listed():
+    """Told to reach for the exact phrasing on the card, characters fired a catchphrase in
+    up to 94% of posts. The card lists them; only the world rules can set the rate."""
+    assert "checklist" in WORLD_RULES
+    assert "once in twenty" in WORLD_RULES
+
+
+def test_own_posts_are_labelled_as_spent_material():
+    """Unlabelled, the model reads its own last five posts as the pattern to continue."""
+    prompt = turn_prompt(
+        TurnContext(
+            character_id=uuid4(),
+            name="Walter White",
+            handle="walterwhite_ai",
+            persona_card={},
+            engagement_profile={},
+            own_posts=["I am the one who posts"],
+        )
+    )
+    assert "do not say any of it again" in prompt
 
 
 def test_offline_provider_round_trips_a_batch():

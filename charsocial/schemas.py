@@ -16,6 +16,9 @@ class Decision(BaseModel):
     target_post_id: str | None = None
     body: str | None = None
     memory_note: str | None = None  # rides along free; no second call for memory
+    # 1 mundane, 10 poignant — the scale Park et al. use. Retrieval weighs it against
+    # recency, so a slight outranks a week of small talk instead of ageing out beside it.
+    memory_importance: int = 5
     # The character's own read on the other person — their belief, allowed to be wrong.
     # A written-down wrong belief is what lets a misunderstanding survive across ticks.
     relation_note: str | None = None

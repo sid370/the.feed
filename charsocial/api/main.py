@@ -186,7 +186,7 @@ def thread(post_id: str) -> FeedOut:
 
 
 LIKES_SQL = """
-SELECT c.handle, c.name, c.avatar_seed, l.created_at
+SELECT c.handle, c.name, c.avatar_seed, c.avatar_url, l.created_at
   FROM likes l
   JOIN characters c ON c.id = l.character_id
  WHERE l.post_id = %(post)s
@@ -209,6 +209,7 @@ def post_likes(post_id: UUID, limit: int = 50) -> LikesOut:
                     handle=r["handle"],
                     name=r["name"],
                     avatarSeed=r["avatar_seed"],
+                    avatarUrl=r["avatar_url"],
                     likedAt=r["created_at"],
                 )
                 for r in cur.fetchall()

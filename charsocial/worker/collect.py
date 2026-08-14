@@ -114,10 +114,16 @@ def _apply(cur: db.Cursor, ctx: dict, decision: dict, submitted_at) -> int:
         return 0
 
     _consume_notifications(cur, character_id, submitted_at)
-    _record_memory(cur, character_id, decision.get("memory_note"))
+    _record_memory(
+        cur, character_id, decision.get("memory_note"), decision.get("memory_importance")
+    )
 
-    # A hallucinated id must degrade to "no target", never raise.
-    target_id = _valid_post_id(cur, decision.get("target_post_id"))
+    # A hallucinated id must degrade to "no target", never raise. The slate the model saw
+    # used short ids, so resolve through that map first; a raw UUID still parses, which
+    # keeps batches submitted before the map existed collectable.
+    raw_target = decision.get("target_post_id")
+    raw_target = (ctx.get("slate_ids") or {}).get(raw_target, raw_target)
+    target_id = _valid_post_id(cur, raw_target)
     target_author = _author_of(cur, target_id) if target_id else None
 
     if target_author:
@@ -149,10 +155,11 @@ def _apply(cur: db.Cursor, ctx: dict, decision: dict, submitted_at) -> int:
     if not body:
         return 0
 
-    # An action that needs a target but lost it to validation degrades to a plain post
-    # rather than vanishing — the generation is already paid for.
+    # Dropped, not degraded. Publishing a reply as a top-level post puts "Dario, that
+    # discomfort you just named..." in the timeline addressed to nobody, which is worse
+    # than losing the generation we already paid for.
     if action in {"reply", "quote"} and not target_id:
-        action = "post"
+        return 0
 
     if action == "post":
         _write_post(cur, character_id, body, headline_id=ctx.get("headline_id"))
@@ -258,12 +265,16 @@ def _consume_notifications(cur: db.Cursor, character_id, submitted_at) -> None:
     )
 
 
-def _record_memory(cur: db.Cursor, character_id, note) -> None:
+def _record_memory(cur: db.Cursor, character_id, note, importance=None) -> None:
     note = (note or "").strip()
     if note:
+        try:
+            weight = max(1, min(10, int(importance if importance is not None else 5)))
+        except (TypeError, ValueError):
+            weight = 5
         cur.execute(
-            "INSERT INTO memory_notes (character_id, note) VALUES (%s, %s)",
-            (character_id, note[:280]),
+            "INSERT INTO memory_notes (character_id, note, importance) VALUES (%s, %s, %s)",
+            (character_id, note[:280], weight),
         )
 
 

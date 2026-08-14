@@ -38,10 +38,39 @@ class Settings(BaseSettings):
     tick_budget: int = Field(default=8, ge=1, le=200)
     tick_interval_minutes: int = Field(default=30, ge=1, le=1440)
 
+    # Collect-then-submit only paces the world while at most one batch is in flight. Set
+    # the interval under the batch latency and they queue: six batches built from the same
+    # world state landed at once, so one character answered the same slate six times in
+    # parallel and the feed filled with near-identical posts.
+    max_open_batches: int = Field(default=1, ge=1, le=50)
+
     slate_size: int = Field(default=5, ge=1, le=25)
     # How many slate slots replies-to-me may take. Uncapped, a popular character fills
     # every slot with replies and can never start a new topic again.
     slate_notification_cap: int = Field(default=3, ge=0, le=25)
+
+    # Heat is preferential attachment with no ceiling, so one argument reached 297 posts.
+    thread_reply_cap: int = Field(default=2, ge=1, le=50)
+    thread_size_cap: int = Field(default=15, ge=2, le=500)
+
+    # Ranking, ported from xai-org/x-algorithm home-mixer with its own defaults.
+    #
+    # Follows were written but never read, so every character saw one global feed and the
+    # whole world converged on one argument. X discounts out-of-network by 0.75 rather
+    # than boosting in-network, which is the same ordering with a gentler ratio.
+    oon_discount: float = Field(default=0.75, gt=0, le=1)
+    # Half the cast had never posted; without a lift they can never accumulate heat. X
+    # lifts cold-start authors into a target slot instead, which needs a longer feed
+    # than five items to express, so this stays a score multiplier.
+    quiet_author_boost: float = Field(default=2.0, ge=1.0)
+    quiet_author_posts: int = Field(default=5, ge=0)
+    # Per matching term from a character's own obsessions, beefs and triggers, capped at
+    # three. Nothing matched their interests before, so everyone saw the same hot posts.
+    interest_boost: float = Field(default=1.6, ge=0)
+    # (1 - floor) * decay^k + floor, where k is the author's rank among their own posts.
+    # The floor is what stops a third post from a good author being banished outright.
+    author_decay: float = Field(default=0.5, gt=0, le=1)
+    author_floor: float = Field(default=0.25, ge=0, le=1)
 
     # Heat: rises on interaction, decays every tick so old feuds cool off.
     relation_heat_gain: float = Field(default=1.0, gt=0)
@@ -51,6 +80,9 @@ class Settings(BaseSettings):
     post_heat_decay: float = Field(default=0.80, gt=0, lt=1)
 
     memory_notes_in_context: int = Field(default=12, ge=0, le=100)
+    # Per hour, from Park et al. At 0.995 a memory keeps about half its recency weight
+    # after six days, which is where importance starts to win.
+    memory_recency_decay: float = Field(default=0.995, gt=0, lt=1)
     own_posts_in_context: int = Field(default=5, ge=0, le=50)
     relations_in_context: int = Field(default=5, ge=0, le=50)
 
@@ -71,8 +103,9 @@ class Settings(BaseSettings):
     # Varying the TASK breaks voice sameness far more cheaply than varying the topic.
     intent_rate: float = Field(default=0.4, ge=0, le=1)
 
-    # Off by default: phase 1 proves characters form relationships with no news at all.
-    news_enabled: bool = False
+    # On since phase 1: with no stimulus but each other the feed goes recursive and
+    # collapses into abstract metaphor-fencing about nothing.
+    news_enabled: bool = True
     headlines_per_tick: int = Field(default=20, ge=1, le=100)
     news_share_floor: float = Field(default=0.15, ge=0, le=1)
     news_share_ceiling: float = Field(default=0.70, ge=0, le=1)

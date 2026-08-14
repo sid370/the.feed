@@ -198,6 +198,7 @@ class Liker(Strict):
     handle: str
     name: str
     avatarSeed: str
+    avatarUrl: str | None = None
     likedAt: datetime
 
 

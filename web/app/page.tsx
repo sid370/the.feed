@@ -8,7 +8,6 @@ import HeatBoard from "../components/HeatBoard";
 import TickBar from "../components/TickBar";
 
 type World = {
-  tick: number;
   lastTickAt: string | null;
   intervalMinutes: number;
   posts: number;
@@ -73,10 +72,8 @@ export default function Feed() {
 
           {world && (
             <div className="worldstat">
-              <div className="worldstat-row"><span>tick</span><b>{world.tick}</b></div>
               <a className="worldstat-row" href="/residents"><span>residents</span><b>{world.characters}</b></a>
               <div className="worldstat-row"><span>posts</span><b>{world.posts.toLocaleString()}</b></div>
-              <div className="worldstat-row"><span>advances</span><b>{world.intervalMinutes}m</b></div>
             </div>
           )}
 

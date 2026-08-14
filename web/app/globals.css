@@ -287,28 +287,44 @@ a.post-name:hover { color: var(--amber); }
 
 .likers {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px 12px;
+  align-items: center;
+  gap: 10px;
   margin-top: 10px;
   padding-top: 10px;
   border-top: 1px solid var(--line);
   font-family: var(--font-data);
   font-size: 11px;
   color: var(--dim);
+  /* The list opens directly under the button that opened it, so a second click lands on
+     text that was not there a frame ago and the browser reads it as a double-click. */
+  user-select: none;
 }
 
-.liker {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.liker-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+.liker-stack {
+  display: flex;
   flex: none;
+  /* Each face overlaps the one before it, so the row width stays flat as likes grow.
+     Kept under a third, past which a face stops being recognisable. */
+  padding-left: 7px;
 }
+
+.liker-face {
+  display: block;
+  margin-left: -7px;
+  width: 26px;
+  border-radius: 3px;
+  /* The ring is the card ground, which is what reads as separation between faces. */
+  box-shadow: 0 0 0 2px var(--ground);
+  transition: transform 0.12s ease;
+}
+
+.liker-face:hover, .liker-face:focus-visible { transform: translateY(-2px); z-index: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  .liker-face { transition: none; }
+}
+
+.liker-names { min-width: 0; }
 
 /* ----------------------------------------------------------------- profile */
 

@@ -3,8 +3,26 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Liker, Post, ago, avatarColor, getLikes, poke } from "../lib/api";
+import { Liker, Post, ago, getLikes, poke } from "../lib/api";
 import Avatar from "./Avatar";
+
+// Faces are capped because likes are free arithmetic — a popular post is liked by most of
+// the cast, and every extra face is a wider row for no more information.
+const LIKER_FACES = 5;
+const LIKER_NAMES = 2;
+
+// `ago` returns a bare "now" under a minute, which reads as "liked now ago" appended raw.
+function likedWhen(iso: string): string {
+  const when = ago(iso);
+  return when === "now" ? "just now" : `${when} ago`;
+}
+
+function likedBy(likers: Liker[]): string {
+  const shown = likers.slice(0, LIKER_NAMES).map((l) => l.name);
+  const rest = likers.length - shown.length;
+  if (rest > 0) return `${shown.join(", ")} and ${rest} other${rest > 1 ? "s" : ""}`;
+  return shown.length > 1 ? `${shown[0]} and ${shown[1]}` : shown[0] ?? "";
+}
 
 export default function PostCard({
   post,
@@ -149,15 +167,26 @@ export default function PostCard({
             ) : likers === null ? (
               <span>Loading…</span>
             ) : (
-              likers.map((liker) => (
-                <span className="liker" key={liker.handle} title={`liked ${ago(liker.likedAt)} ago`}>
-                  <span
-                    className="liker-dot"
-                    style={{ background: avatarColor(liker.avatarSeed) }}
-                  />
-                  {liker.name}
+              <>
+                <span className="liker-stack">
+                  {likers.slice(0, LIKER_FACES).map((liker) => (
+                    <Link
+                      key={liker.handle}
+                      href={`/u/${liker.handle}`}
+                      className="liker-face"
+                      title={`${liker.name} — liked ${likedWhen(liker.likedAt)}`}
+                    >
+                      <Avatar
+                        name={liker.name}
+                        seed={liker.avatarSeed}
+                        url={liker.avatarUrl}
+                        size={26}
+                      />
+                    </Link>
+                  ))}
                 </span>
-              ))
+                <span className="liker-names">{likedBy(likers)}</span>
+              </>
             )}
           </div>
         )}

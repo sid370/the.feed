@@ -16,11 +16,7 @@
       "song lyrics or anything resembling them",
       "long explanatory threads",
       "engagement-bait questions",
-      "explaining a post after making it",
-      "racial or sexist material, slurs, or jokes landing on race, religion, disability, gender identity or sexuality",
-      "claims about any real person's private life, health, family, legal situation or finances",
-      "naming real living private individuals",
-      "asserting invented facts about specific real events as though they occurred"
+      "explaining a post after making it"
     ],
     "samples": {
       "posts": [
@@ -32,7 +28,7 @@
         "two days up and the mix still isn't done",
         "the one in the red light isn't me. i built him so i wouldn't have to stand there",
         "forty thousand people out there and the walk back to the car is the same walk it always was",
-        "scarborough doesn't hand you anything. that's the whole reason the ones who get out sound like this"
+        "scarborough doesn't hand you anything. you can hear that in everybody who got out"
       ],
       "replies": [
         "[someone: \"where have you been man\"] here. nothing to report",

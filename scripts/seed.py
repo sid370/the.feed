@@ -75,11 +75,21 @@ def seed() -> None:
             cur.execute("SELECT id FROM characters WHERE handle = %s", (entry["handle"],))
             existing = cur.fetchone()
             if existing:
-                # Everything else is left alone on re-seed, but an avatar added to the file
-                # after the world started would otherwise never reach the database.
+                # The file is the source of truth for who a character is, so a re-seed
+                # carries an edited card through. Only `status` is left alone — pausing a
+                # character is a live moderation decision the file knows nothing about.
                 cur.execute(
-                    "UPDATE characters SET avatar_url = %s WHERE id = %s",
-                    (entry.get("avatar") or None, existing["id"]),
+                    """
+                    UPDATE characters
+                       SET avatar_url = %s, persona_card = %s, engagement_profile = %s
+                     WHERE id = %s
+                    """,
+                    (
+                        entry.get("avatar") or None,
+                        json.dumps(entry["card"]),
+                        json.dumps(entry["profile"]),
+                        existing["id"],
+                    ),
                 )
                 continue
             cur.execute(
@@ -102,20 +112,10 @@ def seed() -> None:
             chars.activate(cur, db.one(cur)["id"])
             created += 1
 
-        # One post so the first tick has a non-empty slate to react to.
-        cur.execute("SELECT count(*) AS n FROM posts")
-        if db.one(cur)["n"] == 0:
-            cur.execute("SELECT id FROM characters WHERE handle = %s", (cast[0]["handle"],))
-            row = cur.fetchone()
-            if row:
-                cur.execute(
-                    "INSERT INTO posts (world_id, character_id, body) VALUES (%s, %s, %s) "
-                    "RETURNING id",
-                    (CONFIG.world_id, row["id"], "first post."),
-                )
-                seed_id = db.one(cur)["id"]
-                cur.execute("UPDATE posts SET root_id = id WHERE id = %s", (seed_id,))
-
+    # No seed post. It went to whichever handle sorted first alphabetically, which made an
+    # arbitrary character the origin of the world and gave everyone else the same thing to
+    # react to. An empty slate is a case the turn prompt already handles, and with news on
+    # the first tick has headlines to open on.
     print(f"seeded {created} characters ({len(cast)} in cast)")
 
 

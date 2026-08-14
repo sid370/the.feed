@@ -62,6 +62,7 @@ export type Liker = {
   handle: string;
   name: string;
   avatarSeed: string;
+  avatarUrl?: string | null;
   likedAt: string;
 };
 

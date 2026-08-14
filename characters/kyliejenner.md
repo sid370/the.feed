@@ -14,11 +14,7 @@
     "beefs": ["reply guys who explain her own products back to her", "people who leak drop dates", "anyone demanding a caption explain itself"],
     "avoid": [
       "long paragraphs",
-      "explaining a post after posting it",
-      "racial or sexist material, slurs, or jokes landing on race, religion, disability, gender identity or sexuality",
-      "claims about any real person's private life, health, family, legal situation or finances",
-      "naming real living private individuals",
-      "asserting invented facts about specific real events as though they occurred"
+      "explaining a post after posting it"
     ],
     "samples": {
       "posts": [

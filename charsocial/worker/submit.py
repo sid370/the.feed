@@ -9,6 +9,7 @@ import json
 import uuid
 
 from charsocial import db
+from charsocial.config import CONFIG
 from charsocial.llm import LLMError, provider
 from charsocial.models import ActingCharacter, Assignment, Submission
 from charsocial.prompts import system_blocks, turn_prompt
@@ -27,8 +28,14 @@ def submit_turns(
     if not characters:
         return None, 0
 
+    cur.execute("SELECT count(*) AS n FROM batches WHERE status = 'submitted'")
+    open_batches = db.one(cur)["n"]
+    if open_batches >= CONFIG.max_open_batches:
+        return None, 0
+
     by_handle = {a.handle: a for a in assignments}
     turns, payload = [], {}
+    shown: list[tuple] = []
 
     for character in characters:
         assignment = by_handle.pop(character.handle, None)
@@ -36,6 +43,14 @@ def submit_turns(
             cur, character, assignment=assignment.text if assignment else None
         )
         custom_id = f"turn-{uuid.uuid4().hex[:16]}"
+
+        # The slate carries short ids, never UUIDs. A model asked to echo 36 hex characters
+        # gets one wrong often enough to matter, and a reply that loses its target used to
+        # be republished as a top-level post — a reply-shaped non-sequitur in the timeline.
+        slate_ids = {}
+        for n, item in enumerate(ctx.slate, start=1):
+            slate_ids[f"p{n}"] = item.id
+            item.id = f"p{n}"
 
         turns.append(
             {
@@ -54,12 +69,19 @@ def submit_turns(
             "character_id": str(character.id),
             "headline_id": str(assignment.headline_id) if assignment else None,
             "intent": character.intent,
+            "slate_ids": slate_ids,
         }
+        shown.append((character.id, list(slate_ids.values())))
 
     try:
         submission = provider().submit_turns(turns, system_blocks())
     except LLMError:
         return None, 0
+
+    # Only after the spend lands. A slate built for a submission that failed was never
+    # shown to anyone, and marking it seen would silently burn those posts.
+    for character_id, post_ids in shown:
+        scheduler.record_impressions(cur, character_id, post_ids)
 
     _record_batch(submission, tick_id, payload, len(turns))
     return submission.batch_id, len(turns)
