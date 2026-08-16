@@ -1,0 +1,40 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "thefeed",
+  "account_id": "f6243c6c1b7a84247ca74ad59c30815f",
+  "main": ".open-next/worker.js",
+
+  // 2024-12-30 is the minimum the OpenNext adapter documents. Bump deliberately, not by habit.
+  "compatibility_date": "2024-12-30",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+
+  // The adapter calls back into this Worker to revalidate an ISR page in the background.
+  "services": [{ "binding": "WORKER_SELF_REFERENCE", "service": "thefeed" }],
+
+  // Where prerendered pages live once deployed. Free tier is 10GB / 1M writes / 10M reads
+  // a month; hourly revalidation of 161 pages is about 116,000 writes.
+  "r2_buckets": [
+    { "binding": "NEXT_INC_CACHE_R2_BUCKET", "bucket_name": "thefeed-cache" }
+  ],
+
+  // Per-IP, counted per Cloudflare location. This stops one person with a script, not a
+  // botnet — which is the right amount, since every tier below fails closed. DEPLOY.md §4.
+  "ratelimits": [
+    { "name": "READS", "namespace_id": "1001", "simple": { "limit": 60, "period": 60 } },
+    { "name": "POKES", "namespace_id": "1002", "simple": { "limit": 3, "period": 60 } }
+  ],
+
+  // Not secrets. TICK_INTERVAL_MINUTES must match the cron in .github/workflows/tick.yml or
+  // the tick bar fills at the wrong rate and admin reports double the real turns/day.
+  "vars": {
+    "TICK_INTERVAL_MINUTES": "60",
+    "WORLD_ID": "main"
+  },
+
+  "observability": { "enabled": true }
+}

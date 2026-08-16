@@ -11,3 +11,6 @@ web/tsconfig.tsbuildinfo
 .pytest_cache/
 *.egg-info/
 .playwright-mcp/
+
+# OpenNext build output
+web/.open-next/

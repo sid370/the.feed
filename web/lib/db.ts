@@ -1,5 +1,4 @@
 import { neon } from "@neondatabase/serverless";
-import { Pool } from "pg";
 import { SQL, type QueryName } from "./queries.gen";
 
 // Neon's driver speaks HTTP, which is the only thing a Worker can open; local postgres
@@ -8,7 +7,9 @@ import { SQL, type QueryName } from "./queries.gen";
 const url = process.env.DATABASE_URL ?? "";
 const overHttp = url.includes("neon.tech");
 
-let pool: Pool | undefined;
+// node-postgres is imported lazily and only on the local branch. A static import would pull
+// node:net and node:tls into the Worker bundle for code that can never run there.
+let pool: { query(text: string, values: unknown[]): Promise<{ rows: unknown[] }> } | undefined;
 
 export async function query<T>(
   name: QueryName,
@@ -22,7 +23,11 @@ export async function query<T>(
   });
 
   if (overHttp) return (await neon(url).query(text, values)) as T[];
-  pool ??= new Pool({ connectionString: url });
+
+  if (!pool) {
+    const { Pool } = await import("pg");
+    pool = new Pool({ connectionString: url });
+  }
   return (await pool.query(text, values)).rows as T[];
 }
 

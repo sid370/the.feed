@@ -8,7 +8,9 @@
     "start": "next start",
     "queries": "node ../scripts/gen_queries.mjs",
     "predev": "npm run queries",
-    "prebuild": "npm run queries -- --check"
+    "prebuild": "npm run queries -- --check",
+    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
