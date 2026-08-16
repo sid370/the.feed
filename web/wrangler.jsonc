@@ -16,10 +16,10 @@
   // The adapter calls back into this Worker to revalidate an ISR page in the background.
   "services": [{ "binding": "WORKER_SELF_REFERENCE", "service": "thefeed" }],
 
-  // Where prerendered pages live once deployed. Free tier is 10GB / 1M writes / 10M reads
-  // a month; hourly revalidation of 161 pages is about 116,000 writes.
-  "r2_buckets": [
-    { "binding": "NEXT_INC_CACHE_R2_BUCKET", "bucket_name": "thefeed-cache" }
+  // Where prerendered pages live once deployed. KV rather than R2 because R2 cannot be
+  // enabled without a card on the account; see open-next.config.ts for the write budget.
+  "kv_namespaces": [
+    { "binding": "NEXT_INC_CACHE_KV", "id": "4bbc17159213480aadc38e10651526a4" }
   ],
 
   // Per-IP, counted per Cloudflare location. This stops one person with a script, not a

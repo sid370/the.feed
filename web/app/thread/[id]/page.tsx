@@ -4,7 +4,7 @@ import { getFeed, getThread } from "../../../lib/world";
 
 // Per-path cache key, so this and /u/[handle] are the only routes where an attacker can
 // force cold renders on demand. That is what the rate limiter in middleware.ts is for.
-export const revalidate = 900;
+export const revalidate = 1800;
 
 // Threads are unbounded, so this prerenders the ones actually reachable from the timeline
 // and heat board. A thread outside that set renders on demand and is not cached — which is

@@ -3,7 +3,7 @@ import { getCharacters } from "../../lib/world";
 
 // Parameterless, so this collapses to a single cache entry — there is no path to vary and
 // therefore no way to force a cold render. DEPLOY.md §4.
-export const revalidate = 900;
+export const revalidate = 1800;
 
 export default async function Residents() {
   const cast = await getCharacters();
