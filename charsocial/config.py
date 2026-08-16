@@ -145,18 +145,21 @@ class Settings(BaseSettings):
         """
         if self.llm_provider != "anthropic":
             return
-        published = [
+        # Empty counts as unset, not as "not the default". A GitHub Actions secret that was
+        # never created renders as an empty string, so checking only against the documented
+        # default let a scheduled tick spend against a blank password.
+        unsafe = [
             name
             for name, value, default in (
                 ("ADMIN_TOKEN", self.admin_token, "dev-admin-token"),
                 ("SITE_PASSWORD", self.site_password, "letmein"),
             )
-            if value == default
+            if not value.strip() or value == default
         ]
-        if published:
+        if unsafe:
             raise RuntimeError(
-                f"refusing to start: {', '.join(published)} still set to the documented "
-                "default while LLM_PROVIDER=anthropic. Set real values first."
+                f"refusing to start: {', '.join(unsafe)} is empty or still set to the "
+                "documented default while LLM_PROVIDER=anthropic. Set real values first."
             )
 
 

@@ -204,6 +204,27 @@ def test_spend_guard_rejects_published_secrets():
         live.assert_safe_to_spend()
 
 
+def test_spend_guard_rejects_unset_secrets():
+    """An Actions secret that was never created arrives as "", not as the default. Checking
+    only against the default let a scheduled tick spend against a blank password."""
+    import charsocial.config as cfg
+
+    blank = cfg.CONFIG.model_copy(
+        update={"llm_provider": "anthropic", "admin_token": "real-token", "site_password": ""}
+    )
+    with pytest.raises(RuntimeError, match="SITE_PASSWORD"):
+        blank.assert_safe_to_spend()
+
+    ok = cfg.CONFIG.model_copy(
+        update={
+            "llm_provider": "anthropic",
+            "admin_token": "real-token",
+            "site_password": "a-real-password",
+        }
+    )
+    ok.assert_safe_to_spend()
+
+
 def test_turn_prompt_shows_what_a_reply_is_answering():
     """Without the parent snippet a character answers something nobody said."""
     prompt = turn_prompt(
