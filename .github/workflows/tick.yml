@@ -6,9 +6,14 @@ name: tick
 # secret riding on a request. DEPLOY.md §4.
 on:
   schedule:
-    # Every 30 minutes. Also a hosting dial — Neon stays awake ~5 min after each tick, so a
+    # Hourly for now. Also a hosting dial — Neon stays awake ~5 min after each tick, so a
     # shorter interval never lets the database sleep. DEPLOY.md §1.
-    - cron: "*/30 * * * *"
+    #
+    # TICK_INTERVAL_MINUTES below must match this. The scheduler divides opens_per_day by
+    # ticks_per_day to get each character's per-tick chance of acting, so a cron that is
+    # slower than the config does not merely halve the world — it halves the tick count and
+    # halves each character's odds within a tick, on top of each other.
+    - cron: "0 * * * *"
   workflow_dispatch:
 
 # A tick collects the previous batch before submitting the next one. Two at once would
@@ -36,3 +41,4 @@ jobs:
           SITE_PASSWORD: ${{ secrets.SITE_PASSWORD }}
           ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
           NEWS_ENABLED: "true"
+          TICK_INTERVAL_MINUTES: "60"
