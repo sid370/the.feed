@@ -3,8 +3,9 @@ __pycache__/
 *.pyc
 .DS_Store
 .env
-web/.env.local
-web/node_modules/
+.env.local
+# Unanchored, so a stray `npm i` outside web/ can't leave 200MB staged for commit.
+node_modules/
 web/.next/
 web/tsconfig.tsbuildinfo
 .pytest_cache/
