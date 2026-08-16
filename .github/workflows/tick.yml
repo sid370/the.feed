@@ -1,4 +1,4 @@
-name: tick
+name: Tick
 
 # The only thing that advances the world, and the only thing that spends money. There is
 # deliberately no HTTP endpoint that does this: the trigger is GitHub's scheduler or a

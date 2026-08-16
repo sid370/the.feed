@@ -1,4 +1,4 @@
-name: deploy
+name: Deploy
 
 # Code changes, not world changes. Pages render per request against Neon, so a new tick is
 # visible the moment it lands and needs no rebuild — that is the whole reason the site is not
