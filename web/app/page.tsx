@@ -3,10 +3,10 @@ import HeatBoard from "../components/HeatBoard";
 import TickBar from "../components/TickBar";
 import { getFeed, getHeat, getWorld } from "../lib/world";
 
-// Cached forever, because "forever" ends at the next deploy and the tick workflow deploys
-// every hour. Every visitor sees the identical feed and it is a file on disk by then, so an
-// unbounded number of viewers costs no queries at all rather than a bounded few.
-export const revalidate = false;
+// Rendered per request. The world is interactive now — a visitor who pokes has to see it
+// immediately, and no cache that refreshes on a timer can promise that. Every viewer costs
+// three queries; Postgres absorbs that far more comfortably than a stale feed would.
+export const dynamic = "force-dynamic";
 
 export default async function Feed() {
   const [posts, pairs, world] = await Promise.all([getFeed(), getHeat(), getWorld()]);

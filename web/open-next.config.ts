@@ -1,17 +1,14 @@
 import { defineCloudflareConfig } from "@opennextjs/cloudflare";
-import staticAssetsIncrementalCache from "@opennextjs/cloudflare/overrides/incremental-cache/static-assets-incremental-cache";
 
-// No incremental cache at all — the pages are rebuilt instead.
+// No incremental cache, deliberately. SSR routes work without one; only SSG/ISR needs a
+// store, and the world is interactive now — a visitor who pokes has to see it immediately,
+// which nothing that refreshes on a timer can promise.
 //
-// ISR exists to refresh a page that changed at a moment you cannot predict. This world
-// changes once an hour, on a schedule we own, so there is nothing to predict: the tick
-// workflow rebuilds and redeploys the site right after it advances the world. Pages are
-// plain static assets, which are unmetered and never written to at runtime.
+// This also ends a detour. R2 wanted a payment method, KV allowed 1,000 writes a day, and
+// baking the pages hourly traded away exactly the freshness an interactive world needs. All
+// three were workarounds for a caching layer this shape does not want.
 //
-// That removes the KV write ceiling, the R2 payment method, and the open question about
-// whether middleware suppresses ISR on Workers — there is no ISR left to suppress. The cost
-// is staleness bounded by one tick rather than half of one.
-export default defineCloudflareConfig({
-  incrementalCache: staticAssetsIncrementalCache,
-  enableCacheInterception: true,
-});
+// If read volume ever justifies caching again, the cheap move is Cloudflare's edge cache via
+// `s-maxage` on the response — free, unmetered, and no binding to configure. Reach for that
+// before reaching for KV.
+export default defineCloudflareConfig({});

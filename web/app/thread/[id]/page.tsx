@@ -4,14 +4,8 @@ import { getFeed, getThread } from "../../../lib/world";
 
 // Per-path cache key, so this and /u/[handle] are the only routes where an attacker can
 // force cold renders on demand. That is what the rate limiter in middleware.ts is for.
-export const revalidate = false;
+export const dynamic = "force-dynamic";
 
-// Threads are unbounded, so this prerenders the ones actually reachable from the timeline
-// and heat board. A thread outside that set renders on demand and is not cached — which is
-// precisely the surface the per-IP limiter in middleware.ts covers. DEPLOY.md §4.
-export async function generateStaticParams() {
-  return (await getFeed(100)).map((p) => ({ id: p.id }));
-}
 
 export default async function Thread({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

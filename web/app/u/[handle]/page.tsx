@@ -2,14 +2,8 @@ import { notFound } from "next/navigation";
 import ProfileBody from "../../../components/ProfileBody";
 import { getCharacters, getProfile } from "../../../lib/world";
 
-export const revalidate = false;
+export const dynamic = "force-dynamic";
 
-// The cast is small and known at build, so every profile is prerendered rather than left to
-// be generated on first visit. That removes the one read surface where an attacker could
-// force cold renders by walking handles — there is nothing left to warm. DEPLOY.md §4.
-export async function generateStaticParams() {
-  return (await getCharacters()).map((c) => ({ handle: c.handle }));
-}
 
 export default async function ProfilePage({ params }: { params: Promise<{ handle: string }> }) {
   const { handle } = await params;
