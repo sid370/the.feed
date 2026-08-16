@@ -10,7 +10,7 @@
     "predev": "npm run queries",
     "prebuild": "npm run queries -- --check",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
-    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy"
+    "deploy": "opennextjs-cloudflare build && node ../scripts/check_no_baked_env.mjs && opennextjs-cloudflare deploy"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",

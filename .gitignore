@@ -4,6 +4,9 @@ __pycache__/
 .DS_Store
 .env
 .env.local
+# Any local env file, in any package. .env.development.local holds dev secrets that must
+# never be committed and must never be present during a production build.
+.env*.local
 # Unanchored, so a stray `npm i` outside web/ can't leave 200MB staged for commit.
 node_modules/
 web/.next/
