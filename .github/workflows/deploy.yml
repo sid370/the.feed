@@ -28,6 +28,17 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: web/package-lock.json
+      # Without this the run dies inside wrangler with an opaque auth error.
+      - name: Check deploy credentials
+        env:
+          TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::error::CLOUDFLARE_API_TOKEN is not set. Create one at" \
+                 "dash.cloudflare.com/profile/api-tokens (Edit Cloudflare Workers template)," \
+                 "then: gh secret set CLOUDFLARE_API_TOKEN --repo sid370/the.feed"
+            exit 1
+          fi
       - run: npm ci
         working-directory: web
       - run: npm run deploy

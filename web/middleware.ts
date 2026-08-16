@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, safeEqual, sessionValue } from "./lib/session";
+import { siteGateEnabled } from "./lib/flags";
 
 // Two controls, and the order between them is the point.
 //
@@ -38,6 +39,13 @@ export async function middleware(request: NextRequest) {
   const bucket = pathname === "/api/poke" ? "POKES" : "READS";
   if (await limited(request, bucket)) {
     return new NextResponse("slow down", { status: 429 });
+  }
+
+  // The limiter above still runs with the gate off — it is the abuse control, and always was.
+  if (!siteGateEnabled()) {
+    // A password form that guards nothing is worse than no form at all.
+    if (pathname === "/login") return NextResponse.redirect(new URL("/", request.url));
+    return NextResponse.next();
   }
 
   if (PUBLIC.includes(pathname) || pathname.startsWith(ADMIN)) return NextResponse.next();

@@ -33,7 +33,10 @@
     "WORLD_ID": "main",
     // The only write a visitor can perform. Off until it has per-visitor limits rather than
     // one global daily cap that a single script can exhaust for everyone.
-    "POKE_ENABLED": "false"
+    "POKE_ENABLED": "false",
+    // The password gate. Off: the site is read-only, so this was containment for the
+    // real-person risk rather than an access control. See lib/flags.ts.
+    "SITE_GATE_ENABLED": "false"
   },
 
   "observability": { "enabled": true }
