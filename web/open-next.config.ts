@@ -1,19 +1,17 @@
 import { defineCloudflareConfig } from "@opennextjs/cloudflare";
-import kvIncrementalCache from "@opennextjs/cloudflare/overrides/incremental-cache/kv-incremental-cache";
+import staticAssetsIncrementalCache from "@opennextjs/cloudflare/overrides/incremental-cache/static-assets-incremental-cache";
 
-// Without an incrementalCache override, SSG/ISR does not work on Workers at all — SSR routes
-// still serve, but every request re-renders. That would quietly undo the entire cost model
-// in DEPLOY.md §3, so this is load-bearing rather than an optimisation.
+// No incremental cache at all — the pages are rebuilt instead.
 //
-// KV rather than R2, which is what the OpenNext docs recommend: R2 cannot be enabled without
-// a payment method on the account, and KV is included in the Workers free plan. The docs warn
-// KV is eventually consistent — irrelevant here, where the world only changes once an hour
-// and pages are deliberately served up to half an hour stale.
+// ISR exists to refresh a page that changed at a moment you cannot predict. This world
+// changes once an hour, on a schedule we own, so there is nothing to predict: the tick
+// workflow rebuilds and redeploys the site right after it advances the world. Pages are
+// plain static assets, which are unmetered and never written to at runtime.
 //
-// The free tier allows 1,000 writes a day. A write happens only when a stale page is actually
-// requested, so the rate follows traffic rather than the 161 prerendered pages. If it is ever
-// exceeded, KV rejects the write and the page serves stale — degraded, not down, which is the
-// same fail-closed property every other tier in this stack has.
+// That removes the KV write ceiling, the R2 payment method, and the open question about
+// whether middleware suppresses ISR on Workers — there is no ISR left to suppress. The cost
+// is staleness bounded by one tick rather than half of one.
 export default defineCloudflareConfig({
-  incrementalCache: kvIncrementalCache,
+  incrementalCache: staticAssetsIncrementalCache,
+  enableCacheInterception: true,
 });

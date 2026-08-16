@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import FollowList from "../../../../components/FollowList";
 import { getCharacters, getFollows, getProfileHeader } from "../../../../lib/world";
 
-export const revalidate = 1800;
+export const revalidate = false;
 
 // One entry per resident, so every follow list is warm. An empty array here does NOT give
 // on-demand ISR — it silently leaves the route rendering on every request.

@@ -42,3 +42,31 @@ jobs:
           ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
           NEWS_ENABLED: "true"
           TICK_INTERVAL_MINUTES: "60"
+
+  # The site has no runtime cache — every page is a static file, rebuilt here once the world
+  # has moved. That is why an unbounded number of visitors costs nothing at all rather than a
+  # bounded few queries, and why there is no KV write ceiling to think about.
+  #
+  # `needs: tick` rather than its own schedule: it must read a world that has already
+  # advanced, and a failed tick should leave the last good site serving rather than redeploy
+  # an unchanged one.
+  deploy:
+    needs: tick
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+        working-directory: web
+      - run: npm run deploy
+        working-directory: web
+        env:
+          # Read at build time: the 161 pages are prerendered against the real world here.
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          # Wrangler's OAuth login is local-only, so CI authenticates with an API token.
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

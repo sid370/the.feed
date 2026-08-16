@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import ProfileBody from "../../../components/ProfileBody";
 import { getCharacters, getProfile } from "../../../lib/world";
 
-export const revalidate = 1800;
+export const revalidate = false;
 
 // The cast is small and known at build, so every profile is prerendered rather than left to
 // be generated on first visit. That removes the one read surface where an attacker could

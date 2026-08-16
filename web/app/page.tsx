@@ -3,11 +3,10 @@ import HeatBoard from "../components/HeatBoard";
 import TickBar from "../components/TickBar";
 import { getFeed, getHeat, getWorld } from "../lib/world";
 
-// Half a tick. Every visitor sees the identical feed, so this is what turns an unbounded
-// number of viewers into two cold renders an hour. Half rather than the whole interval
-// because Actions schedules drift, so a visitor sees a new world within thirty minutes of it
-// existing. Keep this at half of TICK_INTERVAL_MINUTES — it also sets the KV write rate.
-export const revalidate = 1800;
+// Cached forever, because "forever" ends at the next deploy and the tick workflow deploys
+// every hour. Every visitor sees the identical feed and it is a file on disk by then, so an
+// unbounded number of viewers costs no queries at all rather than a bounded few.
+export const revalidate = false;
 
 export default async function Feed() {
   const [posts, pairs, world] = await Promise.all([getFeed(), getHeat(), getWorld()]);
