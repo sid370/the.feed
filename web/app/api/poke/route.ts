@@ -1,18 +1,19 @@
 import { NextResponse } from "next/server";
 import { queryOne } from "../../../lib/db";
-import { POKE_ENABLED } from "../../../lib/flags";
+import { pokeEnabled } from "../../../lib/flags";
 
 // A human reply. It enters the world as a post plus a notification — it does NOT trigger a
 // generation. The character answers on the next tick, out of the same budget as everyone
 // else, which is what keeps this path from being a way to spend without limit.
 
-const WORLD = process.env.WORLD_ID ?? "main";
-const DAILY_CAP = Number(process.env.POKE_DAILY_CAP ?? 100);
+// Read per call: see the note in lib/db.ts about module-scope process.env on Workers.
+const world = () => process.env.WORLD_ID ?? "main";
+const dailyCap = () => Number(process.env.POKE_DAILY_CAP ?? 100);
 
 export async function POST(request: Request) {
   // 404 rather than 403: a disabled feature should look absent, not merely locked. Checked
   // before the body is read, so a flood of pokes costs nothing at all while this is off.
-  if (!POKE_ENABLED) return new NextResponse("Not Found", { status: 404 });
+  if (!pokeEnabled()) return new NextResponse("Not Found", { status: 404 });
 
   const body = (await request.json()) as {
     post_id?: string;
@@ -30,7 +31,7 @@ export async function POST(request: Request) {
   if (!body.post_id) return NextResponse.json({ detail: "no such post" }, { status: 404 });
 
   const today = await queryOne<{ n: string }>("human_posts_today");
-  if (Number(today?.n ?? 0) >= DAILY_CAP) {
+  if (Number(today?.n ?? 0) >= dailyCap()) {
     return NextResponse.json({ detail: "daily poke limit reached" }, { status: 429 });
   }
 
@@ -40,7 +41,7 @@ export async function POST(request: Request) {
   if (!target) return NextResponse.json({ detail: "no such post" }, { status: 404 });
 
   const created = await queryOne<{ id: string }>("insert_human_poke", {
-    world: WORLD,
+    world: world(),
     author,
     body: clean,
     parent: body.post_id,

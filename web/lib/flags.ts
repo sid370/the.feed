@@ -1,8 +1,12 @@
 import "server-only";
 
-// Env values are strings, and the string "false" is truthy — the single most likely way a
-// kill switch silently fails to kill anything. Parsed once, here, rather than at each site.
+// A function, not a const. On Workers, vars and secrets land on process.env while a request
+// is being handled, so a module-scope read can run first and see nothing — which for a kill
+// switch means it silently reads as "off" or "on" for reasons unrelated to configuration.
+//
+// Env values are also strings, and the string "false" is truthy: the other usual way a
+// switch stops switching. Both hazards are handled once, here.
 //
 // Default off: the poke is the only write a visitor can perform, so it should require a
 // deliberate opt-in rather than appear because a variable went missing.
-export const POKE_ENABLED = process.env.POKE_ENABLED === "true";
+export const pokeEnabled = (): boolean => process.env.POKE_ENABLED === "true";

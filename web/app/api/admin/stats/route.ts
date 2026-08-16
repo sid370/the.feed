@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { denyAdmin } from "../../../../lib/admin";
 import { query, queryOne } from "../../../../lib/db";
 
-const WORLD = process.env.WORLD_ID ?? "main";
+const world = () => process.env.WORLD_ID ?? "main";
 const num = (v: unknown): number => Number(v ?? 0);
 
 export async function GET(request: Request) {
@@ -10,7 +10,7 @@ export async function GET(request: Request) {
   if (denied) return denied;
 
   const [totals, usage, recent] = await Promise.all([
-    queryOne<any>("admin_totals", { world: WORLD }),
+    queryOne<any>("admin_totals", { world: world() }),
     queryOne<any>("admin_usage"),
     query<any>("admin_recent_ticks"),
   ]);

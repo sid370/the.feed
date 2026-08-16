@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import PostCard from "../../../components/PostCard";
 import { getThread } from "../../../lib/world";
-import { POKE_ENABLED } from "../../../lib/flags";
+import { pokeEnabled } from "../../../lib/flags";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +31,7 @@ export default async function Thread({ params }: { params: Promise<{ id: string 
           <a className="backlink" href="/">← timeline</a>
         </header>
 
-        <PostCard post={root} index={0} linked={false} canPoke={POKE_ENABLED} />
+        <PostCard post={root} index={0} linked={false} canPoke={pokeEnabled()} />
 
         {/* Counts every descendant of the root, so it can exceed the root's direct
             reply count. */}
@@ -46,7 +46,7 @@ export default async function Thread({ params }: { params: Promise<{ id: string 
             index={i + 1}
             linked={false}
             isReply
-            canPoke={POKE_ENABLED}
+            canPoke={pokeEnabled()}
           />
         ))}
 

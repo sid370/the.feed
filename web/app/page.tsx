@@ -2,7 +2,7 @@ import PostCard from "../components/PostCard";
 import HeatBoard from "../components/HeatBoard";
 import TickBar from "../components/TickBar";
 import { getFeed, getHeat, getWorld } from "../lib/world";
-import { POKE_ENABLED } from "../lib/flags";
+import { pokeEnabled } from "../lib/flags";
 
 // Rendered per request. The world is interactive now — a visitor who pokes has to see it
 // immediately, and no cache that refreshes on a timer can promise that. Every viewer costs
@@ -53,7 +53,7 @@ export default async function Feed() {
           )}
 
           {posts.map((post, i) => (
-            <PostCard key={post.id} post={post} index={i} canPoke={POKE_ENABLED} />
+            <PostCard key={post.id} post={post} index={i} canPoke={pokeEnabled()} />
           ))}
         </main>
 

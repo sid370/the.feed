@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import ProfileBody from "../../../components/ProfileBody";
 import { getProfile } from "../../../lib/world";
-import { POKE_ENABLED } from "../../../lib/flags";
+import { pokeEnabled } from "../../../lib/flags";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +33,7 @@ export default async function ProfilePage({ params }: { params: Promise<{ handle
           profile={data.profile}
           posts={data.posts}
           replies={data.replies}
-          canPoke={POKE_ENABLED}
+          canPoke={pokeEnabled()}
         />
       </main>
 

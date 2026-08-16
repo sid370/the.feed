@@ -10,7 +10,9 @@ import type { Character, Liker, Person, Post, Profile } from "./api";
 // and TIMESTAMPTZ arrives as a Date; the FastAPI responses these replace were numbers and
 // ISO strings. Skip either and the difference shows up as "[object Object]" in a timestamp
 // or a follower count that sorts lexicographically.
-const WORLD = process.env.WORLD_ID ?? "main";
+
+// Read per call: see the note in lib/db.ts about module-scope process.env on Workers.
+const world = () => process.env.WORLD_ID ?? "main";
 
 const num = (v: unknown): number => Number(v ?? 0);
 const iso = (v: unknown): string => (v instanceof Date ? v.toISOString() : String(v));
@@ -57,7 +59,7 @@ function toPost(row: any): Post {
 }
 
 export async function getFeed(limit = 40, offset = 0): Promise<Post[]> {
-  const rows = await query("feed", { world: WORLD, limit: Math.min(limit, 100), offset });
+  const rows = await query("feed", { world: world(), limit: Math.min(limit, 100), offset });
   return rows.map(toPost);
 }
 
@@ -77,7 +79,7 @@ export async function getLikes(post: string, limit = 50): Promise<Liker[]> {
 }
 
 export async function getHeat(limit = 8): Promise<Pair[]> {
-  const rows = await query<any>("heat", { world: WORLD, limit: Math.min(limit, 20) });
+  const rows = await query<any>("heat", { world: world(), limit: Math.min(limit, 20) });
   const top = Math.max(...rows.map((r) => num(r.heat)), 1) || 1;
   return rows.map((r) => ({
     a: r.a_name,
@@ -92,8 +94,8 @@ export async function getHeat(limit = 8): Promise<Pair[]> {
 export async function getWorld(): Promise<World> {
   const [last, posts, active] = await Promise.all([
     queryOne<any>("last_finished_tick"),
-    queryOne<any>("post_count", { world: WORLD }),
-    queryOne<any>("active_character_count", { world: WORLD }),
+    queryOne<any>("post_count", { world: world() }),
+    queryOne<any>("active_character_count", { world: world() }),
   ]);
   return {
     tick: last ? num(last.id) : 0,
@@ -105,7 +107,7 @@ export async function getWorld(): Promise<World> {
 }
 
 export async function getCharacters(): Promise<Character[]> {
-  const rows = await query<any>("character_list", { world: WORLD });
+  const rows = await query<any>("character_list", { world: world() });
   return rows.map((r) => ({
     handle: r.handle,
     name: r.name,
@@ -123,7 +125,7 @@ export async function getCharacters(): Promise<Character[]> {
  *  queries for them would be two cold-render queries per handle for a string. */
 export async function getProfileHeader(raw: string): Promise<Profile | null> {
   const handle = raw.replace(/^@/, "").toLowerCase();
-  const row = await queryOne<any>("profile", { handle, world: WORLD });
+  const row = await queryOne<any>("profile", { handle, world: world() });
   return row ? toProfile(row) : null;
 }
 
@@ -131,8 +133,8 @@ export async function getProfile(
   raw: string,
 ): Promise<{ profile: Profile; posts: Post[]; replies: Post[] } | null> {
   const handle = raw.replace(/^@/, "").toLowerCase();
-  const args = { handle, world: WORLD, limit: 50 };
-  const row = await queryOne<any>("profile", { handle, world: WORLD });
+  const args = { handle, world: world(), limit: 50 };
+  const row = await queryOne<any>("profile", { handle, world: world() });
   if (!row) return null;
 
   // Both tabs come from the same rows, so switching between them shouldn't hit the network.
@@ -171,7 +173,7 @@ export async function getFollows(
   const handle = raw.replace(/^@/, "").toLowerCase();
   const rows = await query<any>(direction, {
     handle,
-    world: WORLD,
+    world: world(),
     limit: Math.min(limit, 200),
   });
   return rows.map((r) => ({
