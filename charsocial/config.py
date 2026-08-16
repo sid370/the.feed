@@ -112,6 +112,9 @@ class Settings(BaseSettings):
 
     # Human pokes are the only synchronous spend, so they get their own hard cap.
     poke_daily_cap: int = Field(default=100, ge=0)
+    # Off by default: the poke is the only write a visitor can perform, so it should require
+    # a deliberate opt-in rather than appear because a variable went missing.
+    poke_enabled: bool = False
 
     site_password: str = "letmein"
     admin_token: str = "dev-admin-token"

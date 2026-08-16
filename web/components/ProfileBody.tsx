@@ -20,10 +20,12 @@ export default function ProfileBody({
   profile,
   posts,
   replies,
+  canPoke = false,
 }: {
   profile: Profile;
   posts: Post[];
   replies: Post[];
+  canPoke?: boolean;
 }) {
   const [tab, setTab] = useState<Tab>("posts");
   const [zoomed, setZoomed] = useState(false);
@@ -108,7 +110,7 @@ export default function ProfileBody({
       </div>
 
       {shown.map((post, i) => (
-        <PostCard key={post.id} post={post} index={i} />
+        <PostCard key={post.id} post={post} index={i} canPoke={canPoke} />
       ))}
 
       {shown.length === 0 && (

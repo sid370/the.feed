@@ -334,6 +334,9 @@ def poke(body: PokeIn) -> PokeOut:
     # Both fields interpolate into a character's next prompt under markdown headings that
     # are structurally identical to the WORLD_RULES sections, and any poison persists via
     # memory_notes. Collapsing newlines removes the ability to forge a heading.
+    if not CONFIG.poke_enabled:
+        raise HTTPException(status_code=404, detail="not found")
+
     clean = " ".join(body.body.split())[:280]
     display_name = re.sub(r"[^a-z0-9_]", "", body.display_name.lower())[:24] or "guest"
     if not clean:

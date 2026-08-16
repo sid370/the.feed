@@ -1,9 +1,8 @@
 import { notFound } from "next/navigation";
 import PostCard from "../../../components/PostCard";
-import { getFeed, getThread } from "../../../lib/world";
+import { getThread } from "../../../lib/world";
+import { POKE_ENABLED } from "../../../lib/flags";
 
-// Per-path cache key, so this and /u/[handle] are the only routes where an attacker can
-// force cold renders on demand. That is what the rate limiter in middleware.ts is for.
 export const dynamic = "force-dynamic";
 
 
@@ -32,7 +31,7 @@ export default async function Thread({ params }: { params: Promise<{ id: string 
           <a className="backlink" href="/">← timeline</a>
         </header>
 
-        <PostCard post={root} index={0} linked={false} />
+        <PostCard post={root} index={0} linked={false} canPoke={POKE_ENABLED} />
 
         {/* Counts every descendant of the root, so it can exceed the root's direct
             reply count. */}
@@ -41,7 +40,14 @@ export default async function Thread({ params }: { params: Promise<{ id: string 
         )}
 
         {replies.map((post, i) => (
-          <PostCard key={post.id} post={post} index={i + 1} linked={false} isReply />
+          <PostCard
+            key={post.id}
+            post={post}
+            index={i + 1}
+            linked={false}
+            isReply
+            canPoke={POKE_ENABLED}
+          />
         ))}
 
         {replies.length === 0 && (

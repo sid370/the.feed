@@ -29,11 +29,15 @@ export default function PostCard({
   index,
   linked = true,
   isReply = false,
+  canPoke = false,
 }: {
   post: Post;
   index: number;
   linked?: boolean;
   isReply?: boolean;
+  // Off unless a server component says otherwise. The endpoint 404s independently, so this
+  // only hides a control that would fail — it is not the enforcement.
+  canPoke?: boolean;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -149,15 +153,17 @@ export default function PostCard({
           ) : (
             <span>0 likes</span>
           )}
-          <button
-            onClick={(e) => {
-              stop(e);
-              setOpen((v) => !v);
-            }}
-            aria-expanded={open}
-          >
-            {open ? "cancel" : "reply"}
-          </button>
+          {canPoke && (
+            <button
+              onClick={(e) => {
+                stop(e);
+                setOpen((v) => !v);
+              }}
+              aria-expanded={open}
+            >
+              {open ? "cancel" : "reply"}
+            </button>
+          )}
         </footer>
 
         {showLikers && (
@@ -191,7 +197,7 @@ export default function PostCard({
           </div>
         )}
 
-        {open && !sent && (
+        {canPoke && open && !sent && (
           <div style={{ marginTop: 10 }} onClick={stop}>
             <input
               className="field"

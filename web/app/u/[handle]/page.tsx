@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import ProfileBody from "../../../components/ProfileBody";
-import { getCharacters, getProfile } from "../../../lib/world";
+import { getProfile } from "../../../lib/world";
+import { POKE_ENABLED } from "../../../lib/flags";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +29,12 @@ export default async function ProfilePage({ params }: { params: Promise<{ handle
           <a className="backlink" href="/">← timeline</a>
         </header>
 
-        <ProfileBody profile={data.profile} posts={data.posts} replies={data.replies} />
+        <ProfileBody
+          profile={data.profile}
+          posts={data.posts}
+          replies={data.replies}
+          canPoke={POKE_ENABLED}
+        />
       </main>
 
       <aside className="rail-r" />
