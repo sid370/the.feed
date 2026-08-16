@@ -350,19 +350,14 @@ def poke(body: PokeIn) -> PokeOut:
             raise HTTPException(status_code=404, detail="no such post")
 
         cur.execute(
-            SQL["insert_human_post"],
+            SQL["insert_human_poke"],
             {
                 "world": CONFIG.world_id, "author": display_name, "body": clean,
                 "parent": body.post_id, "root": target["root"],
+                "character": target["character_id"],
             },
         )
         new_id = db.one(cur)["id"]
-        cur.execute(SQL["bump_reply_count"], {"post": body.post_id})
-        if target["character_id"]:
-            cur.execute(
-                SQL["insert_human_notification"],
-                {"character": target["character_id"], "post": new_id},
-            )
     return PokeOut(ok=True, id=str(new_id))
 
 

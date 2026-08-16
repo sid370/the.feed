@@ -11,10 +11,11 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import LiteralString, cast
 
 QUERY_DIR = Path(__file__).resolve().parent.parent / "db" / "queries"
 
-_NAME = re.compile(r"^--\s*name:\s*(\w+)\s*$", re.M)
+_NAME = re.compile(r"^--\s*name:\s*(\w+)\s*$", re.MULTILINE)
 _PARAM = re.compile(r"(?<!:):([a-z_][a-z0-9_]*)")
 
 
@@ -26,17 +27,20 @@ def strip_body(body: str) -> str:
     return "\n".join(lines).strip()
 
 
-def _load() -> dict[str, str]:
-    loaded: dict[str, str] = {}
+def _load() -> dict[str, LiteralString]:
+    # psycopg types execute() as taking LiteralString, to stop callers building SQL with an
+    # f-string. Ours comes from checked-in .sql files with no runtime input in it, which the
+    # type system cannot see — so the cast is the claim, and db/queries/ is what backs it.
+    loaded: dict[str, LiteralString] = {}
     for path in sorted(QUERY_DIR.glob("*.sql")):
         chunks = _NAME.split(path.read_text())
         for name, body in zip(chunks[1::2], chunks[2::2]):
             if name in loaded:
                 raise ValueError(f"duplicate query name {name!r} in {path.name}")
-            loaded[name] = _PARAM.sub(r"%(\1)s", strip_body(body))
+            loaded[name] = cast("LiteralString", _PARAM.sub(r"%(\1)s", strip_body(body)))
     if not loaded:
         raise RuntimeError(f"no queries found in {QUERY_DIR}")
     return loaded
 
 
-SQL = _load()
+SQL: dict[str, LiteralString] = _load()

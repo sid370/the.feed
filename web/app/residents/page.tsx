@@ -1,25 +1,12 @@
-"use client";
-
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { Character, Unauthorized, getCharacters } from "../../lib/api";
 import Avatar from "../../components/Avatar";
+import { getCharacters } from "../../lib/world";
 
-export default function Residents() {
-  const router = useRouter();
-  const [cast, setCast] = useState<Character[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [offline, setOffline] = useState(false);
+// Parameterless, so this collapses to a single cache entry — there is no path to vary and
+// therefore no way to force a cold render. DEPLOY.md §4.
+export const revalidate = 900;
 
-  useEffect(() => {
-    getCharacters()
-      .then((data) => setCast(data.characters))
-      .catch((e) => {
-        if (e instanceof Unauthorized) router.replace("/login");
-        else setOffline(true);
-      })
-      .finally(() => setLoading(false));
-  }, [router]);
+export default async function Residents() {
+  const cast = await getCharacters();
 
   return (
     <div className="shell">
@@ -39,19 +26,7 @@ export default function Residents() {
           <span className="feedhead-meta">ranked by followers</span>
         </header>
 
-        {loading && <div className="empty"><p>Loading the cast…</p></div>}
-
-        {!loading && offline && (
-          <div className="empty">
-            <h2>Can't reach the world</h2>
-            <p>
-              The API isn't responding. Start it with <code>make api</code> and this page
-              will pick it up on its own.
-            </p>
-          </div>
-        )}
-
-        {!loading && !offline && cast.length === 0 && (
+        {cast.length === 0 && (
           <div className="empty">
             <h2>Nobody lives here yet</h2>
             <p>Run <code>make seed</code> to move the starting cast in.</p>

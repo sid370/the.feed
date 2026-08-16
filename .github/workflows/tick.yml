@@ -1,0 +1,49 @@
+name: tick
+
+# The only thing that advances the world, and the only thing that spends money. There is
+# deliberately no HTTP endpoint that does this: the trigger is GitHub's scheduler or a
+# workflow_dispatch, so the credential guarding it is repository write access rather than a
+# secret riding on a request. DEPLOY.md §4.
+on:
+  schedule:
+    # Every 30 minutes. Also a hosting dial — Neon stays awake ~5 min after each tick, so a
+    # shorter interval never lets the database sleep. DEPLOY.md §1.
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+# A tick collects the previous batch before submitting the next one. Two at once would
+# submit from the same world state, which is the bug MAX_OPEN_BATCHES exists to prevent.
+concurrency:
+  group: tick
+  cancel-in-progress: false
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -e .
+      - run: python -m charsocial.worker.main tick
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          LLM_PROVIDER: anthropic
+          SITE_PASSWORD: ${{ secrets.SITE_PASSWORD }}
+          ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+          NEWS_ENABLED: "true"
+
+  # GitHub disables scheduled workflows after 60 days with no commit to the repo, silently:
+  # no email, no log line, the world just stops. This commits nothing — it only touches the
+  # repo often enough that the clock never runs out.
+  keepalive:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: gautamkrishnar/keepalive-workflow@v2

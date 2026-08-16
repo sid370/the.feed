@@ -124,9 +124,12 @@ which Cloudflare now prefers over the older `next-on-pages`, and Neon's serverle
 which speaks HTTP — so no TCP sockets and no Hyperdrive.
 
 ```bash
-npm i @opennextjs/cloudflare @neondatabase/serverless
 npx opennextjs-cloudflare build && npx wrangler deploy
 ```
+
+**Next had to be upgraded to run this.** OpenNext requires `next >= 15.5.21` and the project
+was on 15.1.0, so `npm i @opennextjs/cloudflare` fails to resolve rather than installing.
+Next is now `^15.5.23`; do not paper over that peer range with `--legacy-peer-deps`.
 
 Each FastAPI read endpoint becomes a route handler holding the same SQL — the feed, thread,
 likes and heat queries are the interesting part of this project and they are already written.
@@ -205,11 +208,12 @@ by itself; it relocates the box and leaves the shape alone.
 The property we want — an unbounded number of viewers costing a fixed number of queries — only
 appears when the fetch happens on the server and the result is cached:
 
-| Route | Fetch | `revalidate` | Cold renders/hour, at any traffic |
+| Route | Rendering | `revalidate` | Measured |
 |---|---|---|---|
-| `/` (feed, heat, world — 3 queries a render) | server component | 900 | 4 |
-| `/residents` | server component | 900 | 4 |
-| `/u/[handle]`, `/thread/[id]` | server component, cached per path | 900 | 4 per path actually visited |
+| `/` (feed, heat, world — 3 queries a render) | static | 900 | `x-nextjs-cache: HIT` |
+| `/residents` | static | 900 | `x-nextjs-cache: HIT` |
+| `/u/[handle]`, `/u/[handle]/followers`, `/u/[handle]/following` | prerendered per resident | 900 | see the caveat below |
+| `/thread/[id]` | prerendered for the top 100 threads | 900 | see the caveat below |
 | `/api/poke` | route handler | — | one write per accepted poke |
 
 900 s rather than 1,800: the tick drifts, and half the interval means a visitor sees a new
@@ -217,17 +221,43 @@ world within 15 minutes of it existing without doubling anything that matters.
 
 Note what that table does *not* say. "Two requests an hour" is the wrong mental model twice
 over: a cold render of `/` is three queries, not one, and the count is **per cached path** —
-profiles and threads each have their own. A crawler walking 46 profiles and 400 threads is 446
-cold renders. Still bounded, still cheap, still nowhere near two.
+profiles and threads each have their own. A build prerenders 161 pages, which is the real
+number to have in your head.
+
+**`generateStaticParams` is load-bearing and its failure is silent.** A dynamic segment with
+`export const revalidate` and no `generateStaticParams` is re-rendered on *every* request —
+`revalidate` alone does not opt a route into ISR. Returning an empty array does not fix it
+either: the build still prints `●`, which reads like success, and nothing is cached. Both
+routes must return real params. Profiles return the cast, which is bounded by cast size and
+warms every profile at build; threads return the top 100 from the feed, which is why a thread
+outside that set is the one read path that can still be forced cold.
+
+**Caveat, measured and unresolved.** Under `next start`, the parameterised routes are served
+from their prerendered files *only when middleware does not match them*. With the gate's
+matcher covering them they come back `Cache-Control: private, no-cache, no-store` and re-render
+per request; excluding `/u/` and `/thread/` from the matcher, the same build serves the static
+files. Removing the gate is not an option — it is the last control on the real-person risk in
+PLAN.md §12 — and the deployed runtime is OpenNext's incremental cache rather than `next
+start`, so this may not reproduce there at all. **Re-measure `x-nextjs-cache` on those routes
+immediately after the first deploy.** If it does reproduce, the choice is the edge cache in
+front of the Worker or accepting ~4 queries per profile view, and the per-IP limiter is what
+bounds it in the meantime.
 
 **The password gate moves to `middleware.ts`, and that placement is the whole trick.** The
 check has to run per request while the page body is served from cache — if the cookie check
 lives inside the cached render, it is evaluated once and then cached along with everything
-else. Middleware runs before the cache lookup, costs no query, and lets one cached render
-serve every authenticated visitor.
+else. Middleware runs before the cache lookup and costs no query.
 
-Interactivity that survives this: `PostCard`'s poke form and the tab switches stay client
-components, taking server-rendered data as props. Only the data fetching moves.
+`_session_value()` is reimplemented there against Web Crypto, and it has to agree with
+`charsocial/api/main.py` byte for byte — same key, same message, same 32-char truncation —
+or every cookie the API ever issued stops validating with no error to trace.
+`scripts/check_session_parity.mjs` asserts the two agree across unicode and long passwords.
+
+**What stayed a client component, and why.** `PostCard` (the poke form, the likes popover),
+`Avatar` (broken-image fallback), `TickBar` (the ticking hairline) and `ProfileBody` (tab
+switch, portrait lightbox) all hold real state. They take server-rendered data as props, so
+only the fetching moved. `HeatBoard` and `FollowList` turned out to hold none at all and are
+server components now. `/u/[handle]` split in two: the page fetches, `ProfileBody` interacts.
 
 **DNS at GoDaddy** — one record now, and it does not touch the apex:
 

@@ -1,5 +1,3 @@
-"use client";
-
 /* The signature element. It renders the relations table directly — heat rises when two
    characters interact, which makes them likelier to interact again, and decays every
    tick. Feuds are an attractor state that forms on its own, and this is the only place

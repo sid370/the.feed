@@ -1,4 +1,7 @@
-export const API = process.env.NEXT_PUBLIC_API ?? "http://localhost:8000";
+// Same origin now that the reads are route handlers in this app. This was the last
+// NEXT_PUBLIC_ variable in the project, which is a good state to stay in — anything with
+// that prefix is inlined into the browser bundle, and the database URL lives next door.
+export const API = "";
 
 export type Author = {
   handle: string;
@@ -75,18 +78,9 @@ async function get<T>(path: string): Promise<T> {
   return res.json();
 }
 
-export const getFeed = () => get<{ posts: Post[] }>("/api/feed");
-export const getCharacters = () => get<{ characters: Character[] }>("/api/characters");
-export const getThread = (id: string) => get<{ posts: Post[] }>(`/api/thread/${id}`);
+// The only read still made from the browser: likes open on demand, so they cannot be part
+// of the cached page. Everything else is fetched on the server in lib/world.ts.
 export const getLikes = (id: string) => get<{ likers: Liker[] }>(`/api/posts/${id}/likes`);
-export const getFollowers = (handle: string) =>
-  get<{ people: Person[] }>(`/api/profile/${encodeURIComponent(handle)}/followers`);
-export const getFollowing = (handle: string) =>
-  get<{ people: Person[] }>(`/api/profile/${encodeURIComponent(handle)}/following`);
-export const getProfile = (handle: string) =>
-  get<{ profile: Profile; posts: Post[]; replies: Post[] }>(
-    `/api/profile/${encodeURIComponent(handle)}`,
-  );
 
 export async function login(password: string): Promise<boolean> {
   const res = await fetch(`${API}/api/login`, {

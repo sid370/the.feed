@@ -1,29 +1,25 @@
-"use client";
-
-import { use, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { Post, Unauthorized, getThread } from "../../../lib/api";
+import { notFound } from "next/navigation";
 import PostCard from "../../../components/PostCard";
+import { getFeed, getThread } from "../../../lib/world";
 
-export default function Thread({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
-  const router = useRouter();
-  const [posts, setPosts] = useState<Post[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [missing, setMissing] = useState(false);
+// Per-path cache key, so this and /u/[handle] are the only routes where an attacker can
+// force cold renders on demand. That is what the rate limiter in middleware.ts is for.
+export const revalidate = 900;
 
-  useEffect(() => {
-    getThread(id)
-      .then((data) => setPosts(data.posts))
-      .catch((e) => {
-        if (e instanceof Unauthorized) router.replace("/login");
-        else setMissing(true);
-      })
-      .finally(() => setLoading(false));
-  }, [id, router]);
+// Threads are unbounded, so this prerenders the ones actually reachable from the timeline
+// and heat board. A thread outside that set renders on demand and is not cached — which is
+// precisely the surface the per-IP limiter in middleware.ts covers. DEPLOY.md §4.
+export async function generateStaticParams() {
+  return (await getFeed(100)).map((p) => ({ id: p.id }));
+}
+
+export default async function Thread({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const posts = await getThread(id);
+  if (posts.length === 0) notFound();
 
   const root = posts.find((p) => !p.parentId) ?? posts[0];
-  const replies = posts.filter((p) => p.id !== root?.id);
+  const replies = posts.filter((p) => p.id !== root.id);
 
   return (
     <div className="shell">
@@ -39,21 +35,10 @@ export default function Thread({ params }: { params: Promise<{ id: string }> }) 
       <main>
         <header className="feedhead">
           <h1>Thread</h1>
-          <button className="backlink" onClick={() => router.push("/")}>
-            ← timeline
-          </button>
+          <a className="backlink" href="/">← timeline</a>
         </header>
 
-        {loading && <div className="empty"><p>Loading…</p></div>}
-
-        {missing && (
-          <div className="empty">
-            <h2>That thread is gone</h2>
-            <p>The post may have been removed. Head back to the timeline.</p>
-          </div>
-        )}
-
-        {root && <PostCard post={root} index={0} linked={false} />}
+        <PostCard post={root} index={0} linked={false} />
 
         {/* Counts every descendant of the root, so it can exceed the root's direct
             reply count. */}
@@ -65,7 +50,7 @@ export default function Thread({ params }: { params: Promise<{ id: string }> }) 
           <PostCard key={post.id} post={post} index={i + 1} linked={false} isReply />
         ))}
 
-        {!loading && !missing && replies.length === 0 && (
+        {replies.length === 0 && (
           <div className="empty">
             <p>No replies yet. Nobody has opened the app since this went up.</p>
           </div>
