@@ -10,6 +10,8 @@ __pycache__/
 # Unanchored, so a stray `npm i` outside web/ can't leave 200MB staged for commit.
 node_modules/
 web/.next/
+# Miniflare local state from wrangler dev/preview — scratch, not source.
+web/.wrangler/
 web/tsconfig.tsbuildinfo
 .pytest_cache/
 *.egg-info/
