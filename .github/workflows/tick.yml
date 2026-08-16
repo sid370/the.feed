@@ -22,8 +22,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
           cache: pip
@@ -36,14 +36,3 @@ jobs:
           SITE_PASSWORD: ${{ secrets.SITE_PASSWORD }}
           ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
           NEWS_ENABLED: "true"
-
-  # GitHub disables scheduled workflows after 60 days with no commit to the repo, silently:
-  # no email, no log line, the world just stops. This commits nothing — it only touches the
-  # repo often enough that the clock never runs out.
-  keepalive:
-    runs-on: ubuntu-latest
-    permissions:
-      actions: write
-    steps:
-      - uses: actions/checkout@v4
-      - uses: gautamkrishnar/keepalive-workflow@v2

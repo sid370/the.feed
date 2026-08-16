@@ -1,0 +1,27 @@
+name: keepalive
+
+# GitHub disables scheduled workflows after 60 days with no commit to the repository, and it
+# does so silently — no email, no log line, the world simply stops ticking. An empty commit
+# once a month resets that clock.
+#
+# This was a third-party action until it turned out GitHub had blocked that repository for a
+# ToS violation, so every run failed at "Getting action download info". Only first-party
+# actions here, and the mechanism is three lines of git that can be read at a glance.
+on:
+  schedule:
+    - cron: "0 3 1 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  poke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit --allow-empty -m "keepalive: keep scheduled workflows enabled"
+          git push
