@@ -236,3 +236,22 @@ def test_intent_only_fires_at_the_configured_rate():
     )
     hits = sum(_sample_intent(character, rng) is not None for _ in range(400))
     assert 0.25 < hits / 400 < 0.55  # configured 0.4
+
+
+def test_every_shared_query_is_compiled_for_the_typescript_side():
+    """db/queries/*.sql feeds both runtimes. Adding one and forgetting to regenerate
+    web/lib/queries.gen.ts is a deploy-time 500, not a local failure — so fail here."""
+    from pathlib import Path
+
+    from charsocial.queries import SQL
+
+    generated = (Path(__file__).resolve().parent.parent / "web/lib/queries.gen.ts").read_text()
+    missing = [name for name in SQL if f'\n  {name}: {{ text: ' not in generated]
+    assert not missing, f"stale queries.gen.ts, run scripts/gen_queries.mjs: {missing}"
+
+
+def test_placeholders_survive_the_rewrite_without_eating_casts():
+    from charsocial.queries import SQL
+
+    assert "::float" in SQL["profile"]
+    assert "%(world)s" in SQL["feed"] and ":world" not in SQL["feed"]

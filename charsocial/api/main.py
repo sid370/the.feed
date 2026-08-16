@@ -51,6 +51,7 @@ from charsocial.models import (
     UsageOut,
     WorldOut,
 )
+from charsocial.queries import SQL
 from charsocial.worker import characters as chars
 from charsocial.worker import tick as tick_module
 
@@ -108,33 +109,7 @@ def health() -> Health:
 
 # ------------------------------------------------------------------------------- feed
 
-FEED_SQL = """
-SELECT p.id, p.body, p.created_at, p.like_count, p.reply_count, p.heat,
-       p.parent_id, p.quote_of_id,
-       c.handle, c.name, c.avatar_seed, c.avatar_url, c.is_real_person,
-       h.title AS headline_title, h.url AS headline_url
-  FROM posts p
-  LEFT JOIN characters c ON c.id = p.character_id
-  LEFT JOIN headlines h  ON h.id = p.headline_id
- WHERE p.world_id = %(world)s AND p.parent_id IS NULL
- ORDER BY p.heat / (1 + extract(epoch FROM now() - p.created_at) / 3600.0) DESC,
-          p.created_at DESC
- LIMIT %(limit)s OFFSET %(offset)s
-"""
 
-THREAD_SQL = """
-SELECT p.id, p.body, p.created_at, p.like_count, p.reply_count, p.parent_id,
-       coalesce(pc.handle, parent.author_human) AS replying_to,
-       c.handle, c.name, c.avatar_seed, c.avatar_url, c.is_real_person,
-       h.title AS headline_title, h.url AS headline_url
-  FROM posts p
-  LEFT JOIN characters c ON c.id = p.character_id
-  LEFT JOIN posts parent ON parent.id = p.parent_id
-  LEFT JOIN characters pc ON pc.id = parent.character_id
-  LEFT JOIN headlines h  ON h.id = p.headline_id
- WHERE coalesce(p.root_id, p.id) = (SELECT coalesce(root_id, id) FROM posts WHERE id = %s)
- ORDER BY p.created_at
-"""
 
 
 def _post_out(row) -> PostOut:
@@ -169,7 +144,7 @@ def _post_out(row) -> PostOut:
 def feed(limit: int = 40, offset: int = 0) -> FeedOut:
     with db.cursor() as cur:
         cur.execute(
-            FEED_SQL,
+            SQL["feed"],
             {"world": CONFIG.world_id, "limit": min(limit, 100), "offset": max(offset, 0)},
         )
         return FeedOut(posts=[_post_out(r) for r in cur.fetchall()])
@@ -178,21 +153,13 @@ def feed(limit: int = 40, offset: int = 0) -> FeedOut:
 @app.get("/api/thread/{post_id}", response_model=FeedOut, dependencies=[Depends(require_visitor)])
 def thread(post_id: str) -> FeedOut:
     with db.cursor() as cur:
-        cur.execute(THREAD_SQL, (post_id,))
+        cur.execute(SQL["thread"], {"post": post_id})
         rows = cur.fetchall()
     if not rows:
         raise HTTPException(status_code=404, detail="not found")
     return FeedOut(posts=[_post_out(r) for r in rows])
 
 
-LIKES_SQL = """
-SELECT c.handle, c.name, c.avatar_seed, c.avatar_url, l.created_at
-  FROM likes l
-  JOIN characters c ON c.id = l.character_id
- WHERE l.post_id = %(post)s
- ORDER BY l.created_at DESC
- LIMIT %(limit)s
-"""
 
 
 @app.get(
@@ -202,7 +169,7 @@ SELECT c.handle, c.name, c.avatar_seed, c.avatar_url, l.created_at
 )
 def post_likes(post_id: UUID, limit: int = 50) -> LikesOut:
     with db.cursor() as cur:
-        cur.execute(LIKES_SQL, {"post": post_id, "limit": min(limit, 200)})
+        cur.execute(SQL["post_likes"], {"post": post_id, "limit": min(limit, 200)})
         return LikesOut(
             likers=[
                 Liker(
@@ -217,36 +184,6 @@ def post_likes(post_id: UUID, limit: int = 50) -> LikesOut:
         )
 
 
-HEAT_SQL = """
-SELECT a.name AS a_name, b.name AS b_name, r.heat, r.sentiment,
-       coalesce(argued.root_id, liked.root_id) AS thread_id
-  FROM relations r
-  JOIN characters a ON a.id = r.character_id
-  JOIN characters b ON b.id = r.other_id
-  -- The hottest thread both of them actually posted in: the argument itself.
-  LEFT JOIN LATERAL (
-      SELECT coalesce(p.root_id, p.id) AS root_id
-        FROM posts p
-       WHERE p.world_id = a.world_id
-         AND p.character_id IN (r.character_id, r.other_id)
-       GROUP BY coalesce(p.root_id, p.id)
-      HAVING bool_or(p.character_id = r.character_id)
-         AND bool_or(p.character_id = r.other_id)
-       ORDER BY max(p.heat) DESC
-       LIMIT 1
-  ) argued ON true
-  -- Heat also rises on a like alone, so a pair can be hot with nothing said between them.
-  LEFT JOIN LATERAL (
-      SELECT coalesce(p.root_id, p.id) AS root_id
-        FROM posts p
-        JOIN likes l ON l.post_id = p.id AND l.character_id = r.character_id
-       WHERE p.character_id = r.other_id
-       ORDER BY p.heat DESC
-       LIMIT 1
-  ) liked ON true
- WHERE r.heat > 0.2 AND a.world_id = %s
- ORDER BY r.heat DESC LIMIT %s
-"""
 
 
 @app.get("/api/heat", response_model=HeatOut, dependencies=[Depends(require_visitor)])
@@ -254,7 +191,7 @@ def heat_board(limit: int = 8) -> HeatOut:
     """Powers the heat board. This is the engine made visible: heat rises when two
     characters interact and decays every tick, so feuds form and cool on their own."""
     with db.cursor() as cur:
-        cur.execute(HEAT_SQL, (CONFIG.world_id, min(limit, 20)))
+        cur.execute(SQL["heat"], {"world": CONFIG.world_id, "limit": min(limit, 20)})
         rows = cur.fetchall()
     top = max((r["heat"] for r in rows), default=1) or 1
     return HeatOut(
@@ -277,17 +214,11 @@ def heat_board(limit: int = 8) -> HeatOut:
 @app.get("/api/world", response_model=WorldOut, dependencies=[Depends(require_visitor)])
 def world() -> WorldOut:
     with db.cursor() as cur:
-        cur.execute(
-            "SELECT id, started_at FROM ticks WHERE finished_at IS NOT NULL "
-            "ORDER BY id DESC LIMIT 1"
-        )
+        cur.execute(SQL["last_finished_tick"])
         last = cur.fetchone()
-        cur.execute("SELECT count(*) AS n FROM posts WHERE world_id = %s", (CONFIG.world_id,))
+        cur.execute(SQL["post_count"], {"world": CONFIG.world_id})
         posts = db.one(cur)["n"]
-        cur.execute(
-            "SELECT count(*) AS n FROM characters WHERE status='active' AND world_id = %s",
-            (CONFIG.world_id,),
-        )
+        cur.execute(SQL["active_character_count"], {"world": CONFIG.world_id})
         active = db.one(cur)["n"]
     return WorldOut(
         tick=last["id"] if last else 0,
@@ -301,19 +232,7 @@ def world() -> WorldOut:
 @app.get("/api/characters", response_model=CharactersOut, dependencies=[Depends(require_visitor)])
 def character_list() -> CharactersOut:
     with db.cursor() as cur:
-        cur.execute(
-            """
-            SELECT c.handle, c.name, c.avatar_seed, c.avatar_url, c.status,
-                   c.persona_card->>'bio' AS bio,
-                   (c.engagement_profile->>'opens_per_day')::float AS opens_per_day,
-                   (SELECT count(*) FROM posts p WHERE p.character_id = c.id) AS post_count,
-                   (SELECT count(*) FROM follows f WHERE f.followee_id = c.id) AS follower_count
-              FROM characters c
-             WHERE c.world_id = %s AND c.status <> 'draft'
-             ORDER BY follower_count DESC
-            """,
-            (CONFIG.world_id,),
-        )
+        cur.execute(SQL["character_list"], {"world": CONFIG.world_id})
         return CharactersOut(
             characters=[CharacterOut.model_validate(dict(r)) for r in cur.fetchall()]
         )
@@ -321,39 +240,7 @@ def character_list() -> CharactersOut:
 
 # ---------------------------------------------------------------------------- profile
 
-PROFILE_SQL = """
-SELECT c.handle, c.name, c.avatar_seed, c.avatar_url, c.is_real_person, c.status,
-       c.persona_card->>'bio' AS bio,
-       (c.engagement_profile->>'opens_per_day')::float AS opens_per_day,
-       coalesce(c.activated_at, c.created_at) AS joined_at,
-       (SELECT count(*) FROM posts p
-         WHERE p.character_id = c.id AND p.parent_id IS NULL)     AS post_count,
-       (SELECT count(*) FROM posts p
-         WHERE p.character_id = c.id AND p.parent_id IS NOT NULL) AS reply_count,
-       (SELECT coalesce(sum(p.like_count), 0) FROM posts p
-         WHERE p.character_id = c.id)                             AS likes_received,
-       (SELECT count(*) FROM follows f WHERE f.followee_id = c.id) AS follower_count,
-       (SELECT count(*) FROM follows f WHERE f.follower_id = c.id) AS following_count
-  FROM characters c
- WHERE c.handle = %(handle)s AND c.world_id = %(world)s AND c.status <> 'draft'
-"""
 
-# One query for both tabs; the boolean picks which side of the parent_id split to return.
-PROFILE_POSTS_SQL = """
-SELECT p.id, p.body, p.created_at, p.like_count, p.reply_count, p.parent_id,
-       coalesce(pc.handle, parent.author_human) AS replying_to,
-       c.handle, c.name, c.avatar_seed, c.avatar_url, c.is_real_person,
-       h.title AS headline_title, h.url AS headline_url
-  FROM posts p
-  JOIN characters c ON c.id = p.character_id
-  LEFT JOIN posts parent  ON parent.id = p.parent_id
-  LEFT JOIN characters pc ON pc.id = parent.character_id
-  LEFT JOIN headlines h   ON h.id = p.headline_id
- WHERE c.handle = %(handle)s AND p.world_id = %(world)s
-   AND (p.parent_id IS NULL) = %(top_level)s
- ORDER BY p.created_at DESC
- LIMIT %(limit)s
-"""
 
 
 @app.get("/api/profile/{handle}", response_model=ProfileOut, dependencies=[Depends(require_visitor)])
@@ -363,14 +250,14 @@ def profile(handle: str, limit: int = 50) -> ProfileOut:
     handle = handle.lstrip("@").lower()
     args = {"handle": handle, "world": CONFIG.world_id, "limit": min(limit, 100)}
     with db.cursor() as cur:
-        cur.execute(PROFILE_SQL, args)
+        cur.execute(SQL["profile"], args)
         row = cur.fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="no such character")
 
-        cur.execute(PROFILE_POSTS_SQL, {**args, "top_level": True})
+        cur.execute(SQL["profile_posts"], {**args, "top_level": True})
         posts = [_post_out(r) for r in cur.fetchall()]
-        cur.execute(PROFILE_POSTS_SQL, {**args, "top_level": False})
+        cur.execute(SQL["profile_posts"], {**args, "top_level": False})
         replies = [_post_out(r) for r in cur.fetchall()]
 
     return ProfileOut(
@@ -395,23 +282,12 @@ def profile(handle: str, limit: int = 50) -> ProfileOut:
     )
 
 
-# The two directions differ only in which side of the edge the profile sits on, so the
-# column names are the parameter — they are ours, never user input.
-FOLLOWS_SQL = """
-SELECT c.handle, c.name, c.avatar_seed, c.avatar_url, c.persona_card->>'bio' AS bio
-  FROM follows f
-  JOIN characters anchor ON anchor.id = f.{anchor}
-  JOIN characters c      ON c.id = f.{other}
- WHERE anchor.handle = %(handle)s AND anchor.world_id = %(world)s AND c.status <> 'draft'
- ORDER BY f.created_at DESC
- LIMIT %(limit)s
-"""
 
 
-def _follows(handle: str, anchor: str, other: str, limit: int) -> PeopleOut:
+def _follows(handle: str, direction: str, limit: int) -> PeopleOut:
     with db.cursor() as cur:
         cur.execute(
-            FOLLOWS_SQL.format(anchor=anchor, other=other),
+            SQL[direction],
             {"handle": handle, "world": CONFIG.world_id, "limit": min(limit, 200)},
         )
         return PeopleOut(
@@ -434,7 +310,7 @@ def _follows(handle: str, anchor: str, other: str, limit: int) -> PeopleOut:
     dependencies=[Depends(require_visitor)],
 )
 def followers(handle: str, limit: int = 100) -> PeopleOut:
-    return _follows(handle, "followee_id", "follower_id", limit)
+    return _follows(handle, "followers", limit)
 
 
 @app.get(
@@ -443,7 +319,7 @@ def followers(handle: str, limit: int = 100) -> PeopleOut:
     dependencies=[Depends(require_visitor)],
 )
 def following(handle: str, limit: int = 100) -> PeopleOut:
-    return _follows(handle, "follower_id", "followee_id", limit)
+    return _follows(handle, "following", limit)
 
 
 # ------------------------------------------------------------------------------- poke
@@ -464,35 +340,28 @@ def poke(body: PokeIn) -> PokeOut:
         raise HTTPException(status_code=400, detail="empty")
 
     with db.cursor() as cur:
-        cur.execute(
-            "SELECT count(*) AS n FROM posts "
-            "WHERE author_human IS NOT NULL AND created_at > now() - interval '1 day'"
-        )
+        cur.execute(SQL["human_posts_today"])
         if db.one(cur)["n"] >= CONFIG.poke_daily_cap:
             raise HTTPException(status_code=429, detail="daily poke limit reached")
 
-        cur.execute(
-            "SELECT character_id, coalesce(root_id, id) AS root FROM posts WHERE id = %s",
-            (body.post_id,),
-        )
+        cur.execute(SQL["poke_target"], {"post": body.post_id})
         target = cur.fetchone()
         if not target:
             raise HTTPException(status_code=404, detail="no such post")
 
         cur.execute(
-            """
-            INSERT INTO posts (world_id, author_human, body, parent_id, root_id)
-            VALUES (%s, %s, %s, %s, %s) RETURNING id
-            """,
-            (CONFIG.world_id, display_name, clean, body.post_id, target["root"]),
+            SQL["insert_human_post"],
+            {
+                "world": CONFIG.world_id, "author": display_name, "body": clean,
+                "parent": body.post_id, "root": target["root"],
+            },
         )
         new_id = db.one(cur)["id"]
-        # A poke is a real child post, so the parent's rendered count must include it.
-        cur.execute("UPDATE posts SET reply_count = reply_count + 1 WHERE id = %s", (body.post_id,))
+        cur.execute(SQL["bump_reply_count"], {"post": body.post_id})
         if target["character_id"]:
             cur.execute(
-                "INSERT INTO notifications (character_id, post_id, kind) VALUES (%s, %s, 'human')",
-                (target["character_id"], new_id),
+                SQL["insert_human_notification"],
+                {"character": target["character_id"], "post": new_id},
             )
     return PokeOut(ok=True, id=str(new_id))
 
@@ -535,11 +404,7 @@ def patch_character(character_id: str, body: PatchIn) -> Ok:
 )
 def admin_characters() -> AdminCharactersOut:
     with db.cursor() as cur:
-        cur.execute(
-            "SELECT id, handle, name, status, persona_card, engagement_profile "
-            "FROM characters WHERE world_id = %s ORDER BY created_at DESC",
-            (CONFIG.world_id,),
-        )
+        cur.execute(SQL["admin_characters"], {"world": CONFIG.world_id})
         return AdminCharactersOut(
             characters=[AdminCharacter.model_validate(dict(r)) for r in cur.fetchall()]
         )
@@ -553,36 +418,15 @@ def admin_tick() -> TickStats:
 @app.get("/api/admin/stats", response_model=StatsOut, dependencies=[Depends(require_admin)])
 def admin_stats() -> StatsOut:
     with db.cursor() as cur:
-        cur.execute(
-            """
-            SELECT (SELECT count(*) FROM posts WHERE world_id = %(w)s) AS posts,
-                   (SELECT count(*) FROM likes) AS likes,
-                   (SELECT count(*) FROM characters WHERE status='active' AND world_id=%(w)s) AS active,
-                   (SELECT count(*) FROM batches WHERE status='submitted') AS open_batches,
-                   (SELECT count(*) FROM headlines WHERE safe IS FALSE) AS blocked_headlines
-            """,
-            {"w": CONFIG.world_id},
-        )
+        cur.execute(SQL["admin_totals"], {"world": CONFIG.world_id})
         totals = dict(db.one(cur))
 
-        cur.execute(
-            "SELECT id, turns_sent, posts_written, news_share, started_at, error "
-            "FROM ticks ORDER BY id DESC LIMIT 10"
-        )
+        cur.execute(SQL["admin_recent_ticks"])
         recent = [TickRow.model_validate(dict(r)) for r in cur.fetchall()]
 
         # cache_read == 0 across collected batches is the ONLY signal that a silent cache
         # invalidator has crept in — there is no error for it.
-        cur.execute(
-            """
-            SELECT coalesce(sum(input_tokens), 0)       AS input_tokens,
-                   coalesce(sum(output_tokens), 0)      AS output_tokens,
-                   coalesce(sum(cache_read_tokens), 0)  AS cache_read_tokens,
-                   coalesce(sum(cache_write_tokens), 0) AS cache_write_tokens,
-                   count(*) FILTER (WHERE status = 'failed') AS failed_batches
-              FROM batches
-            """
-        )
+        cur.execute(SQL["admin_usage"])
         usage = UsageOut.model_validate(dict(db.one(cur)))
 
     return StatsOut(

@@ -5,15 +5,21 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "queries": "node ../scripts/gen_queries.mjs",
+    "predev": "npm run queries",
+    "prebuild": "npm run queries -- --check"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.1.0",
     "next": "15.1.0",
+    "pg": "^8.23.0",
     "react": "19.0.0",
     "react-dom": "19.0.0"
   },
   "devDependencies": {
     "@types/node": "^22",
+    "@types/pg": "^8.21.0",
     "@types/react": "^19",
     "typescript": "^5.6"
   }

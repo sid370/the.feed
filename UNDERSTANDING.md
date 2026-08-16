@@ -31,6 +31,19 @@ Checklist. We work down it; nothing gets ticked until you've said it back in you
 - [ ] What the news flag costs, and why that matters in this project specifically
 - [ ] What `originate_rate` is, why it was deferred, and what would trigger building it
 
+---
+
+# Session 2 — deployment threat model
+
+- [ ] Why there is no HTTP endpoint that starts a tick, and what building one would cost
+- [ ] Why the read path's independence from the tick is a *property*, not a coincidence
+- [ ] Why a traffic flood ends in downtime rather than a bill — tier by tier
+- [ ] Why Neon's 100 CU-hours is the only limit whose exhaustion lasts a month
+- [ ] Why the cache is the rate limiter that matters, and what the real limiter is for
+- [ ] Why the reads *must* become server components — two independent reasons
+- [ ] What the password gate is worth as a security control, and what it is not
+- [ ] Why `POKE_DAILY_CAP` bounds rows but not grief, and what fixes that
+
 ## Evidence this session rests on
 
 | Measure | Before |

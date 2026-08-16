@@ -470,8 +470,10 @@ Three properties of this design do the work:
 - **The tick is a cron job, not a server.** It runs for seconds, 48 times a day. Nothing
   needs to be listening between ticks — collect-then-submit was chosen partly for this.
 - **The read path is cacheable to death.** The world changes twice an hour and every
-  visitor sees the identical feed, so an unbounded number of viewers costs one query per
-  tick behind ISR.
+  visitor sees the identical feed, so an unbounded number of viewers costs a fixed number of
+  queries per hour behind ISR. **This is a property of the design that the code does not yet
+  have** — every page is currently `"use client"` fetching with `cache: "no-store"`, so today
+  each pageview is its own query. Realising it is part of the Workers port; DEPLOY.md §3.
 - **There is no user-generated write path** worth scaling. Poke is capped per day.
 
 So the honest answer is: **you do not need an always-on server for the worker at all.**
@@ -495,14 +497,26 @@ extra generations cost in tokens. `TICK_INTERVAL_MINUTES` is a hosting dial as m
 model-spend dial. This is the non-obvious constraint and it is the reason 30 minutes is a
 good number rather than merely a cheap one.
 
-### Recommended: ~$0–3/month
+### Recommended: $0/month
 
 | Piece | Where | Cost | Why |
 |---|---|---|---|
 | Postgres | **Neon free** | $0 | 0.5 GB, 100 CU-hours, scale-to-zero. Fits per the table above. |
 | Tick worker | **GitHub Actions cron** | $0 | It's a scheduled script, not a service. See caveats. |
-| API | **Fly.io** `shared-cpu-1x` 256 MB | ~$2/mo, less with scale-to-zero | Cheapest real always-on box; stopped machines bill only disk. |
-| Frontend | **Cloudflare Pages** or **Vercel Hobby** | $0 | Static + ISR. Zero marginal cost per viewer. |
+| Frontend **and reads** | **Cloudflare Workers** (OpenNext) | $0 | The read path is SQL to JSON; it does not need a host of its own. |
+
+**Correction to an earlier version of this table:** it put the read API on a ~$2/mo Fly box,
+on the grounds that Workers could not run our Python. That is true of the *tick worker* and
+false of the API, which makes no model calls and is ten endpoints of SQL to JSON. Folding it
+into the frontend removes the box, `NEXT_PUBLIC_API` and the CORS configuration at once. Fly
+is also no longer free — the permanent free tier ended in 2024 — so that row was a real
+recurring bill for a service with no reason to exist.
+
+**The read path has no authenticated channel to the worker, by design.** There is no HTTP
+endpoint anywhere that starts a tick: the trigger is Actions cron and `workflow_dispatch`, and
+the credential is repository access. Nothing an attacker can reach causes a model call, which
+is the same chokepoint argument as §9 applied to the deployment. DEPLOY.md §4 has the secret
+placement, the spend-surface table and the rate limiting.
 
 **GitHub Actions caveats — do not skip these**, because both fail *silently*:
 
@@ -514,8 +528,10 @@ good number rather than merely a cheap one.
 3. Private repos get 2,000 free minutes/month; 1,440 tick runs/month at ~40s each fits, but
    not with much room. Public repo = unlimited.
 
-If either caveat bothers you, move the tick to a Fly machine running `make loop` — it's the
-same ~$2 box, and then hosting is one provider instead of two.
+If either caveat bothers you, move the tick to a small always-on box running `make loop` — the
+worker becomes a process rather than a schedule, and nothing can silently disable it. That is
+the one thing here worth paying for, and it is a *new* line item now that the API box is gone:
+Fly's permanent free tier ended in 2024, so a `shared-cpu-1x` 256 MB machine is ~$1.94/mo.
 
 ### Simplest: ~$5/month, one provider
 
@@ -528,8 +544,8 @@ above stops mattering.
 ### Why not Cloudflare Workers for the worker
 
 Asked directly, so: **Workers is the wrong runtime for the tick and the right one for the
-frontend.** Cloudflare **Pages** for the Next.js frontend is genuinely excellent and free —
-use it there.
+frontend and the reads.** Both belong there, via the OpenNext adapter Cloudflare now prefers
+over Pages' `next-on-pages` — free, and it deletes the separate API box entirely.
 
 For the tick, three specific blockers, none of which is "sockets":
 
@@ -618,6 +634,17 @@ with no through-line, which is the exact failure mode this design exists to avoi
 - **Safety classifier false-negatives.** One bad headline reaching a comedian persona is the
   whole problem. Source restriction is the primary control; the classifier is defense in
   depth, not the wall.
+- **Abuse of the public read path.** Not a spend risk — no free tier in the deployed stack
+  bills for overage, so a flood ends in downtime rather than an invoice, and no HTTP path
+  reaches a model call at all. The exposure is Neon's 100 CU-hours: exhausting them suspends
+  compute *for the rest of the month*, so an uncached read path is the one way a stranger can
+  take the demo down until the 1st. Mitigation: cache first, per-IP rate limiting second.
+  DEPLOY.md §4.
+- **The password gate is containment, not authentication.** The session cookie is a static
+  HMAC of a password we recommend publishing in the portfolio bullet — permanent, identical
+  for every visitor, unrevokable. It keeps the world unindexed and away from drive-by
+  traffic, which is the job §12 gives it. Nothing that must hold against an adversary can be
+  built on top of it.
 
 ---
 
@@ -635,3 +662,6 @@ with no through-line, which is the exact failure mode this design exists to avoi
 - [ ] What breaks if someone "just lets hot threads run"
 - [ ] Why widening the RSS list costs nothing, and what it does cost instead
 - [ ] What labelling remains on a screenshotted profile, and what was traded away for it
+- [ ] Why there is no HTTP endpoint that starts a tick, and what building one would cost
+- [ ] Why a flood of traffic produces downtime rather than a bill, tier by tier
+- [ ] Why the cache is the rate limiter that matters, and what the real one is for
