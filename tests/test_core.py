@@ -8,7 +8,13 @@ import pytest
 from charsocial.config import CONFIG
 from charsocial.llm import OfflineProvider
 from charsocial.prompts import WORLD_RULES, system_blocks, turn_prompt
-from charsocial.models import ActingCharacter, RelationView, SlateItem, TurnContext
+from charsocial.models import (
+    ActingCharacter,
+    OwnThread,
+    RelationView,
+    SlateItem,
+    TurnContext,
+)
 from charsocial.schemas import Decision, json_schema
 from charsocial.worker import scheduler
 from charsocial.worker.news import _share
@@ -135,6 +141,60 @@ def test_own_posts_are_labelled_as_spent_material():
         )
     )
     assert "do not say any of it again" in prompt
+
+
+def test_own_threads_are_offered_as_reply_targets():
+    """build_slate excludes your own posts, so without an id here a character that has more
+    to say about a subject it already covered can only open a second post about it."""
+    prompt = turn_prompt(
+        TurnContext(
+            character_id=uuid4(),
+            name="Donald Trump",
+            handle="donaldtrump",
+            persona_card={},
+            engagement_profile={},
+            own_threads=[OwnThread(id="m1", body="Had the Steak tonight", replies=2)],
+        )
+    )
+    assert "id=m1" in prompt
+    assert "reply to it by its id" in prompt
+
+
+def test_world_rules_forbid_reusing_a_shape_not_just_a_line():
+    """@netflix repeated its own docuseries skeleton with the earlier post visible under
+    'do not say any of it again' — forbidding restated lines never covered reused form."""
+    assert "same setup, same rhythm" in WORLD_RULES
+    assert "not lines to deliver" in WORLD_RULES
+
+
+def test_rotate_samples_trims_each_group_without_touching_the_card():
+    """@killtony posted a card sample back almost verbatim. The card is rendered whole on
+    every turn, so a vivid sample is a permanent rail unless the set moves."""
+    card = {
+        "bio": "comic",
+        "samples": {
+            "posts": [f"post {i}" for i in range(10)],
+            "replies": ["only one"],
+        },
+    }
+    rotated = scheduler.rotate_samples(card, "killtony", rotation=7)
+
+    assert len(rotated["samples"]["posts"]) == CONFIG.samples_per_group
+    assert rotated["samples"]["replies"] == ["only one"]  # too few to trim
+    assert rotated["bio"] == "comic"
+    # The caller's card is the row loaded for this character and is read again downstream.
+    assert len(card["samples"]["posts"]) == 10
+
+    same = scheduler.rotate_samples(card, "killtony", rotation=7)
+    assert rotated["samples"]["posts"] == same["samples"]["posts"], "a replayed tick must rebuild the same prompt"
+
+    # Across ticks, not between one pair: two seeds picking the same 3 of 10 is rare but
+    # not impossible, and a test that fails once a year is worse than no test.
+    seen = {
+        tuple(scheduler.rotate_samples(card, "killtony", rotation=t)["samples"]["posts"])
+        for t in range(10)
+    }
+    assert len(seen) > 1, "the rail must move between ticks"
 
 
 def test_offline_provider_round_trips_a_batch():

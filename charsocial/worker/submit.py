@@ -40,7 +40,12 @@ def submit_turns(
     for character in characters:
         assignment = by_handle.pop(character.handle, None)
         ctx = scheduler.build_context(
-            cur, character, assignment=assignment.text if assignment else None
+            cur,
+            character,
+            assignment=assignment.text if assignment else None,
+            # Rotates which card samples this turn sees. Tick-derived so replaying a tick
+            # rebuilds the identical prompt.
+            rotation=tick_id,
         )
         custom_id = f"turn-{uuid.uuid4().hex[:16]}"
 
@@ -51,6 +56,17 @@ def submit_turns(
         for n, item in enumerate(ctx.slate, start=1):
             slate_ids[f"p{n}"] = item.id
             item.id = f"p{n}"
+
+        # Only the slate counts as an impression: the entries below are posts the character
+        # wrote, not posts an algorithm put in front of it, and marking them seen would
+        # wrongly filter them out of everyone's candidate pool.
+        impressed = list(slate_ids.values())
+
+        # A character's own open threads are targetable too, under their own prefix so the
+        # two lists cannot collide.
+        for n, thread in enumerate(ctx.own_threads, start=1):
+            slate_ids[f"m{n}"] = thread.id
+            thread.id = f"m{n}"
 
         turns.append(
             {
@@ -71,7 +87,7 @@ def submit_turns(
             "intent": character.intent,
             "slate_ids": slate_ids,
         }
-        shown.append((character.id, list(slate_ids.values())))
+        shown.append((character.id, impressed))
 
     try:
         submission = provider().submit_turns(turns, system_blocks())

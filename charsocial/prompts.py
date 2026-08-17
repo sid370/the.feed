@@ -96,6 +96,21 @@ landed with the words shuffled, and do not reuse a distinctive phrase that appea
 them. If the only thing you have left to say to someone is what you already said, you are
 finished with that conversation — post about something else, or scroll.
 
+That covers what you said. It also covers HOW you said it. Reusing the shape of an earlier
+post — same setup, same rhythm, same list of three, same closing move — is repeating
+yourself even when every word is different. Two posts about the same subject, written
+differently, are still two posts about the same subject.
+
+The samples on your card are evidence of how you sound. They are not lines to deliver. If
+something you are about to write could be mistaken for one of them, you are performing an
+impression of yourself instead of reacting to what is in front of you — throw it out and
+respond to the feed.
+
+If you have already posted about a subject and you have more to say about it, reply to
+your own post about it rather than opening a second one. Your open threads are listed with
+ids; a `reply` aimed at one continues the conversation where the first post already is.
+Starting again from scratch just puts two versions of the same thought in the timeline.
+
 Anything specific your card gives you is worth reaching for exactly once.
 
 ## Continuity
@@ -200,6 +215,17 @@ def turn_prompt(ctx: TurnContext) -> str:
         # its own last five posts as the pattern to continue.
         lines += ["", "## What you have already said — do not say any of it again"]
         lines += [f"- {p}" for p in ctx.own_posts]
+
+    if ctx.own_threads:
+        lines += [
+            "",
+            "## Your own threads, still open",
+            "You posted these. If you have more to say on one of these subjects, reply to it "
+            "by its id instead of writing a new post about the same thing.",
+        ]
+        for thread in ctx.own_threads:
+            answered = f" ({thread.replies} replies so far)" if thread.replies else " (no replies yet)"
+            lines.append(f"- id={thread.id}{answered}: {thread.body}")
 
     if ctx.relations:
         lines += ["", "## How you feel about people here"]

@@ -84,6 +84,16 @@ class Settings(BaseSettings):
     # after six days, which is where importance starts to win.
     memory_recency_decay: float = Field(default=0.995, gt=0, lt=1)
     own_posts_in_context: int = Field(default=5, ge=0, le=50)
+
+    # Own top-level posts offered back as reply targets, so a character with more to say on
+    # a subject continues its own thread instead of opening a second one about it.
+    own_threads_in_context: int = Field(default=3, ge=0, le=20)
+
+    # Card samples shown per action group per turn. The whole card is rendered every turn,
+    # and a memorable sample reproduced in full is the single largest source of repetition —
+    # characters were posting their own samples back nearly verbatim. Rotating a subset keeps
+    # the voice anchored without pinning it to the same handful of lines forever.
+    samples_per_group: int = Field(default=3, ge=1, le=20)
     relations_in_context: int = Field(default=5, ge=0, le=50)
 
     # Free engagement — arithmetic only, never an LLM call.

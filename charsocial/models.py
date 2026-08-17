@@ -58,6 +58,20 @@ class SlateItem(Strict):
     parent_body: str | None = None
 
 
+class OwnThread(Strict):
+    """A top-level post of the character's own that is still open to replies.
+
+    Carries an id for the same reason a SlateItem does: without one the character can only
+    start a new post about a subject it has already covered, because there is nothing to
+    aim a reply at. build_slate excludes your own posts by design, so this is the only way
+    back into your own thread.
+    """
+
+    id: str
+    body: str
+    replies: int = 0
+
+
 class RelationView(Strict):
     name: str
     heat: float
@@ -82,6 +96,7 @@ class TurnContext(Strict):
     engagement_profile: dict[str, Any]
     memory_notes: list[str] = Field(default_factory=list)
     own_posts: list[str] = Field(default_factory=list)
+    own_threads: list[OwnThread] = Field(default_factory=list)
     relations: list[RelationView] = Field(default_factory=list)
     notifications: list[str] = Field(default_factory=list)
     assignment: str | None = None

@@ -168,13 +168,13 @@ def _apply(cur: db.Cursor, ctx: dict, decision: dict, submitted_at) -> int:
     if action == "quote":
         new_id = _write_post(cur, character_id, body, quote_of_id=target_id)
         # Point at the QUOTE, not at what was quoted — see _notify.
-        _notify(cur, target_author, new_id, "quote")
+        _notify(cur, target_author, new_id, "quote", actor=character_id)
         heat.bump_post(cur, target_id, count_reply=False)  # a quote has no child post
         return 1
 
     root_id = _root_of(cur, target_id) or target_id
     new_id = _write_post(cur, character_id, body, parent_id=target_id, root_id=root_id)
-    _notify(cur, target_author, new_id, "reply")
+    _notify(cur, target_author, new_id, "reply", actor=character_id)
     heat.bump_post(cur, target_id, count_reply=True)
     return 1
 
@@ -233,7 +233,7 @@ def _like(cur: db.Cursor, post_id, character_id) -> None:
         cur.execute("UPDATE posts SET like_count = like_count + 1 WHERE id = %s", (post_id,))
 
 
-def _notify(cur: db.Cursor, character_id, post_id, kind) -> None:
+def _notify(cur: db.Cursor, character_id, post_id, kind, actor=None) -> None:
     """`post_id` is the post that was JUST WRITTEN, never the one it answers.
 
     Pointing a notification at the recipient's own post made it invisible: build_slate
@@ -243,6 +243,12 @@ def _notify(cur: db.Cursor, character_id, post_id, kind) -> None:
     to them.
     """
     if not character_id or not post_id:
+        return
+    # A character can aim a reply or a quote at its own thread now, so the recipient is
+    # sometimes the author. Notifying yourself adds to your own pending count, which is
+    # urgency in select_turns — a character would pull itself back for another turn on the
+    # strength of having posted, and keep doing it.
+    if actor is not None and character_id == actor:
         return
     cur.execute(
         "INSERT INTO notifications (character_id, post_id, kind) VALUES (%s, %s, %s)",

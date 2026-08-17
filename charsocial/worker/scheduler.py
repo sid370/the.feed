@@ -11,7 +11,13 @@ import re
 
 from charsocial import db
 from charsocial.config import CONFIG, INTENT_DECK
-from charsocial.models import ActingCharacter, RelationView, SlateItem, TurnContext
+from charsocial.models import (
+    ActingCharacter,
+    OwnThread,
+    RelationView,
+    SlateItem,
+    TurnContext,
+)
 
 # Characters who go looking for conflict should draw the confrontational cards more often.
 FIGHTY = {0, 3, 4, 7}
@@ -298,8 +304,35 @@ def _slate_row(row) -> SlateItem:
     )
 
 
+def rotate_samples(card: dict, handle: str, rotation: int) -> dict:
+    """Show a few samples per action group instead of all of them, varying by tick.
+
+    The full card goes into every turn, so a vivid sample is in front of the writer on every
+    turn forever, and the measured result was characters reproducing their own samples —
+    @killtony posted his card's "Bucket's on the stool…" line back almost word for word.
+    Rotating keeps each group's flavour present while removing the fixed rail.
+
+    Seeded on handle and tick so a rerun of the same tick builds the same prompt; nothing
+    here may depend on wall-clock or the batch stops being reproducible.
+    """
+    samples = (card or {}).get("samples")
+    if not samples:
+        return card
+    rng = random.Random(f"{handle}:{rotation}")
+    keep = {}
+    for group, items in samples.items():
+        items = list(items or [])
+        keep[group] = (
+            items if len(items) <= CONFIG.samples_per_group
+            else rng.sample(items, CONFIG.samples_per_group)
+        )
+    # New dict, never a mutation: the caller's card is the row loaded for this character and
+    # submit.py reads `samples` off it again for the offline provider.
+    return {**card, "samples": keep}
+
+
 def build_context(
-    cur, character: ActingCharacter, assignment: str | None = None
+    cur, character: ActingCharacter, assignment: str | None = None, rotation: int = 0
 ) -> TurnContext:
     """Assemble memory at read time. Nothing is summarised into anything, so there is no
     lossy-copy-of-a-lossy-copy drift — the notes are the notes."""
@@ -332,11 +365,50 @@ def build_context(
     )
     notes = [r["note"] for r in cur.fetchall()]
 
+    # Own top-level posts that are still worth continuing. Offered as reply targets so
+    # "I have more to say about the steak" resolves to a reply on the steak post instead of
+    # a second steak post — the shape of duplication this world actually produces.
+    #
+    # The saturation caps are the ones _candidates applies to everybody else's threads. A
+    # character reaching its own thread through a different door must not thereby escape
+    # them, or it can pile onto one conversation past the size the scheduler allows.
+    cur.execute(
+        """
+        SELECT p.id, p.body,
+               (SELECT count(*) FROM posts r WHERE r.root_id = p.id AND r.id <> p.id) AS replies
+          FROM posts p
+         WHERE p.character_id = %(me)s
+           AND p.parent_id IS NULL
+           AND p.created_at > now() - interval '2 days'
+           AND (SELECT count(*) FROM posts s
+                 WHERE coalesce(s.root_id, s.id) = p.id) < %(size_cap)s
+           AND (SELECT count(*) FROM posts m
+                 WHERE m.character_id = %(me)s
+                   AND coalesce(m.root_id, m.id) = p.id) < %(reply_cap)s
+         ORDER BY p.created_at DESC
+         LIMIT %(limit)s
+        """,
+        {
+            "me": cid,
+            "limit": CONFIG.own_threads_in_context,
+            "size_cap": CONFIG.thread_size_cap,
+            "reply_cap": CONFIG.thread_reply_cap,
+        },
+    )
+    own_threads = [
+        OwnThread(id=str(r["id"]), body=r["body"], replies=r["replies"])
+        for r in cur.fetchall()
+    ][::-1]
+
+    # Everything else recent, as spent material. Anything already listed above is skipped —
+    # the same post under both "do not repeat this" and "reply to this" reads as one muddled
+    # instruction instead of two clear ones.
+    listed = {t.body for t in own_threads}
     cur.execute(
         "SELECT body FROM posts WHERE character_id = %s ORDER BY created_at DESC LIMIT %s",
         (cid, CONFIG.own_posts_in_context),
     )
-    own_posts = [r["body"] for r in cur.fetchall()][::-1]
+    own_posts = [r["body"] for r in cur.fetchall() if r["body"] not in listed][::-1]
 
     # Union of "who I care about most" and "who is actually in front of me right now".
     # Ranking relations purely by global heat means the grudge is often missing at the
@@ -373,10 +445,11 @@ def build_context(
         character_id=cid,
         name=character.name,
         handle=character.handle,
-        persona_card=character.persona_card,
+        persona_card=rotate_samples(character.persona_card, character.handle, rotation),
         engagement_profile=character.engagement_profile,
         memory_notes=notes,
         own_posts=own_posts,
+        own_threads=own_threads,
         relations=relations,
         notifications=notifications,
         assignment=assignment,
