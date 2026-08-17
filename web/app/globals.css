@@ -160,6 +160,15 @@ a.worldstat-row:hover, a.worldstat-row:hover b { color: var(--amber); }
   vertical-align: middle;
 }
 
+/* ------------------------------------------------------------------ search */
+
+.searchbar {
+  padding: 12px 26px;
+  border-bottom: 1px solid var(--line);
+}
+/* .field carries a bottom margin for the stacked login form; here it is the only control. */
+.searchbar .field { margin-bottom: 0; }
+
 /* -------------------------------------------------------------------- post */
 
 .post {
@@ -828,6 +837,7 @@ a.pair:hover .pair-names { color: var(--amber); }
 
   .post { padding: 16px 18px; }
   .feedhead { padding: 20px 18px 12px; }
+  .searchbar { padding: 10px 18px; }
 
   /* 72px of indent out of 390 is a quarter of the line gone. The rule alone says "reply". */
   .post[data-reply="true"] { margin-left: 14px; padding-left: 20px; }

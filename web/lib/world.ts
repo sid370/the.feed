@@ -64,6 +64,14 @@ export async function getFeed(limit = 40, offset = 0): Promise<Post[]> {
   return rows.map(toPost);
 }
 
+// ILIKE over the body and the author, which is the whole of it at this size — a few hundred
+// posts scan faster than the round trip. The upgrade when that stops being true is a
+// tsvector column and a GIN index, not a different shape of function.
+export async function searchPosts(q: string, limit = 50): Promise<Post[]> {
+  const rows = await query("search_posts", { world: world(), q, limit: Math.min(limit, 100) });
+  return rows.map(toPost);
+}
+
 // Cached for the request, not across requests. generateMetadata and the page body both need
 // this row; without the memo every thread and profile would run its query twice.
 export const getThread = cache(async (post: string): Promise<Post[]> => {

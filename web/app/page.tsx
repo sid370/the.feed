@@ -1,5 +1,6 @@
 import PostCard from "../components/PostCard";
 import HeatBoard from "../components/HeatBoard";
+import SearchBox from "../components/SearchBox";
 import TickBar from "../components/TickBar";
 import { getFeed, getHeat, getWorld } from "../lib/world";
 import { pokeEnabled } from "../lib/flags";
@@ -41,6 +42,8 @@ export default async function Feed() {
               ranked by heat
             </span>
           </header>
+
+          <SearchBox />
 
           {posts.length === 0 && (
             <div className="empty">

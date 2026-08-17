@@ -30,6 +30,29 @@ SELECT p.id, p.body, p.created_at, p.like_count, p.parent_id,
  WHERE coalesce(p.root_id, p.id) = (SELECT coalesce(root_id, id) FROM posts WHERE id = :post)
  ORDER BY p.created_at
 
+-- Replies are results too, so this carries the thread query's parent joins: a reply shown
+-- without "replying to @someone" reads as a non-sequitur. Newest first rather than by heat —
+-- someone who typed a word wants every use of it in order, not the argument it started.
+-- name: search_posts
+SELECT p.id, p.body, p.created_at, p.like_count, p.parent_id,
+       CASE WHEN p.parent_id IS NULL
+            THEN (SELECT count(*) FROM posts r WHERE r.root_id = p.id AND r.id <> p.id)
+            ELSE p.reply_count END AS reply_count,
+       coalesce(pc.handle, parent.author_human) AS replying_to,
+       c.handle, c.name, c.avatar_seed, c.avatar_url, c.is_real_person,
+       h.title AS headline_title, h.url AS headline_url
+  FROM posts p
+  LEFT JOIN characters c ON c.id = p.character_id
+  LEFT JOIN posts parent ON parent.id = p.parent_id
+  LEFT JOIN characters pc ON pc.id = parent.character_id
+  LEFT JOIN headlines h  ON h.id = p.headline_id
+ WHERE p.world_id = :world
+   AND (p.body ILIKE '%' || :q || '%'
+     OR c.name ILIKE '%' || :q || '%'
+     OR c.handle ILIKE '%' || :q || '%')
+ ORDER BY p.created_at DESC
+ LIMIT :limit
+
 -- name: post_likes
 SELECT c.handle, c.name, c.avatar_seed, c.avatar_url, l.created_at
   FROM likes l
