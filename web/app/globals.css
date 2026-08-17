@@ -67,7 +67,10 @@ a { color: inherit; text-decoration: none; }
   gap: 0;
   max-width: 1220px;
   margin: 0 auto;
+  /* dvh, because on a phone 100vh is the height with the URL bar hidden and the page is
+     cut off by exactly that bar until you scroll. vh first for browsers without dvh. */
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 .rail-l, .rail-r { padding: 28px 20px; }
@@ -495,7 +498,10 @@ a.post-name:hover { color: var(--amber); }
 .profile-follows a:hover { text-decoration: underline; }
 .profile-follows b { color: var(--ink); font-weight: 700; }
 
-.avatar-zoom { all: unset; cursor: zoom-in; display: block; }
+/* align-self, because a button centres its own content and `all: unset` cannot reach that:
+   stretched to the height of the bio beside it, the portrait floated to the middle of the
+   card. Sizing the button to the portrait leaves nothing to centre within. */
+.avatar-zoom { all: unset; cursor: zoom-in; display: block; align-self: start; }
 .avatar-zoom:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
 
 .lightbox {
@@ -669,6 +675,7 @@ a.pair:hover .pair-names { color: var(--amber); }
 
 .gate {
   min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
   place-items: center;
   padding: 24px;
@@ -766,18 +773,98 @@ a.pair:hover .pair-names { color: var(--amber); }
 }
 
 @media (max-width: 720px) {
-  .shell { grid-template-columns: minmax(0, 1fr); }
+  /* Stacked, the nav is a grid row like any other, so a page shorter than the screen has its
+     leftover height shared out and the bar silently grows by ~50px. Desktop keeps the
+     stretch — there it is what runs the rail borders the full height of the window. */
+  .shell {
+    grid-template-columns: minmax(0, 1fr);
+    align-content: start;
+  }
+
+  /* A rail is a column of vertical space you can spend freely; a phone has none. The same
+     three links stacked cost 197px — a quarter of the screen — before a single post. Laid
+     out as a bar they cost 83px, and the brand keeps its own row so the tagline survives. */
   .rail-l {
     position: static;
     height: auto;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    column-gap: 12px;
     border-right: 0;
     border-bottom: 1px solid var(--line);
-    padding: 18px 20px;
+    padding: 8px 18px;
   }
-  .brand-sub { margin-bottom: 14px; }
+  .brand { flex: none; margin: 0; }
+  .brand-sub { flex: none; margin: 0; }
+  /* A full-width, zero-height item ordered between the brand and the links, which is the
+     only way to guarantee the break: flex fills a line to capacity before it grows anything,
+     so a grow factor on the tagline still lets "Timeline" squeeze onto row one at 390px. */
+  .rail-l::after { content: ""; order: 1; flex-basis: 100%; height: 0; }
+  .navlink {
+    order: 2;
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0;
+  }
+  /* Read as tabs once they sit in a row, so the current one is marked the way tabs are. */
+  .navlink[data-on="true"] { border-bottom-color: var(--amber); }
   .worldstat { display: none; }
+
+  /* The heat board is the one thing here no real feed can show, and hiding it below 1100px
+     meant every phone visitor saw a plain timeline. It moves under the feed instead. */
+  .rail-r {
+    display: block;
+    position: static;
+    height: auto;
+    overflow: visible;
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    padding: 22px 18px 26px;
+  }
+  /* Pages other than the timeline render the aside empty, purely to hold the desktop track. */
+  .rail-r:empty { display: none; }
+
   .post { padding: 16px 18px; }
   .feedhead { padding: 20px 18px 12px; }
+
+  /* 72px of indent out of 390 is a quarter of the line gone. The rule alone says "reply". */
+  .post[data-reply="true"] { margin-left: 14px; padding-left: 20px; }
+
+  /* These sit inside a card that navigates on tap, so missing one is not a no-op — it opens
+     the thread. The negative margin keeps the row the same height while the target grows. */
+  .post-foot { gap: 18px; }
+  /* Named per element, not `> *` — `.post-foot button { all: unset }` is the more specific
+     selector and would reset the padding back to zero. */
+  .post-foot > span, .post-foot > button { padding: 7px 0; margin: -7px 0; }
+
+  .modal-head button { padding: 4px 10px; margin: -4px -10px; }
+
+  /* iOS zooms the whole page in when you focus an input under 16px and never zooms back. */
+  .field, .crow-input { font-size: 16px; }
+
+  /* The stats column was stealing a third of the width from the bio it sat beside. */
+  .resident { grid-template-columns: 44px minmax(0, 1fr); }
+  .resident-stats {
+    grid-column: 2;
+    display: flex;
+    gap: 16px;
+    text-align: left;
+    margin-top: 8px;
+  }
+
+  .crow { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+}
+
+/* A touch device has no pointer to leave, so :hover latches on after a tap and the card
+   you last opened stays lit until you tap something else. */
+@media (hover: none) {
+  .post[data-linked="true"]:hover,
+  .resident:hover,
+  a.pair:hover { background: none; }
+  .resident:hover .resident-name,
+  a.pair:hover .pair-names { color: inherit; }
 }
 
 @media (prefers-reduced-motion: reduce) {
