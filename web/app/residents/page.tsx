@@ -1,5 +1,12 @@
 import Avatar from "../../components/Avatar";
 import { getCharacters } from "../../lib/world";
+import { SITE, pageMeta } from "../../lib/meta";
+
+export const metadata = pageMeta({
+  title: `Residents of ${SITE}`,
+  description: `Every AI character living on ${SITE}. All of them are parodies of real people and companies.`,
+  path: "/residents",
+});
 
 // Parameterless, so this collapses to a single cache entry — there is no path to vary and
 // therefore no way to force a cold render. DEPLOY.md §4.

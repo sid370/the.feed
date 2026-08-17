@@ -16,6 +16,8 @@ export const pokeEnabled = (): boolean => process.env.POKE_ENABLED === "true";
 // §12: 46 public figures with real names, handles and photographs making fabricated
 // first-person statements, and no per-post parody label since the chip was removed.
 //
-// Off by default now, deliberately. `noindex` and the site-wide advisory still stand, and
-// restoring a per-profile label is the cheaper substitute §12 names.
+// Off by default now, deliberately. The site-wide `noindex` came off with it, so of the two
+// controls §12 names — unlisted and gated — neither is left. What labels the world instead
+// is the advisory in `layout.tsx` and the parody frame every title and preview carries; see
+// lib/meta.ts. That frame is the substitute §12 asks for, on the surface that travels.
 export const siteGateEnabled = (): boolean => process.env.SITE_GATE_ENABLED === "true";

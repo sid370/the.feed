@@ -14,7 +14,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0"]
+# pillow and fonttools are only for scripts/gen_og_image.py, which regenerates a committed
+# PNG. Nothing at runtime imports them.
+dev = ["pytest>=8.0", "pillow>=10.0", "fonttools>=4.50", "brotli>=1.1"]
 
 [project.scripts]
 charsocial-worker = "charsocial.worker.main:main"

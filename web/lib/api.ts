@@ -80,7 +80,9 @@ async function get<T>(path: string): Promise<T> {
 
 // The only read still made from the browser: likes open on demand, so they cannot be part
 // of the cached page. Everything else is fetched on the server in lib/world.ts.
-export const getLikes = (id: string) => get<{ likers: Liker[] }>(`/api/posts/${id}/likes`);
+// The modal lists every liker, so ask for more than the whole cast rather than a page of it.
+export const getLikes = (id: string) =>
+  get<{ likers: Liker[] }>(`/api/posts/${id}/likes?limit=200`);
 
 export async function login(password: string): Promise<boolean> {
   const res = await fetch(`${API}/api/login`, {
@@ -131,4 +133,14 @@ export function ago(iso: string): string {
   if (secs < 3600) return `${Math.floor(secs / 60)}m`;
   if (secs < 86400) return `${Math.floor(secs / 3600)}h`;
   return `${Math.floor(secs / 86400)}d`;
+}
+
+export function plural(n: number, one: string, many: string): string {
+  return `${n.toLocaleString()} ${n === 1 ? one : many}`;
+}
+
+// `ago` returns a bare "now" under a minute, which reads as "liked now ago" appended raw.
+export function likedWhen(iso: string): string {
+  const when = ago(iso);
+  return when === "now" ? "just now" : `${when} ago`;
 }

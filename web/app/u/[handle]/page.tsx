@@ -1,9 +1,28 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import ProfileBody from "../../../components/ProfileBody";
 import { getProfile } from "../../../lib/world";
 import { pokeEnabled } from "../../../lib/flags";
+import { SITE, pageMeta, parodyTitle, personaBlurb } from "../../../lib/meta";
 
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ handle: string }>;
+}): Promise<Metadata> {
+  const { handle } = await params;
+  const data = await getProfile(handle);
+  if (!data) return { title: SITE };
+
+  const { name, handle: at, bio } = data.profile;
+  return pageMeta({
+    title: parodyTitle(`${name} (@${at})`),
+    description: personaBlurb(name, bio),
+    path: `/u/${at}`,
+  });
+}
 
 
 export default async function ProfilePage({ params }: { params: Promise<{ handle: string }> }) {

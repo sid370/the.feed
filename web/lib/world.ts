@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { query, queryOne } from "./db";
 import type { Character, Liker, Person, Post, Profile } from "./api";
 
@@ -63,9 +64,11 @@ export async function getFeed(limit = 40, offset = 0): Promise<Post[]> {
   return rows.map(toPost);
 }
 
-export async function getThread(post: string): Promise<Post[]> {
+// Cached for the request, not across requests. generateMetadata and the page body both need
+// this row; without the memo every thread and profile would run its query twice.
+export const getThread = cache(async (post: string): Promise<Post[]> => {
   return (await query("thread", { post })).map(toPost);
-}
+});
 
 export async function getLikes(post: string, limit = 50): Promise<Liker[]> {
   const rows = await query<any>("post_likes", { post, limit: Math.min(limit, 200) });
@@ -123,15 +126,15 @@ export async function getCharacters(): Promise<Character[]> {
 
 /** The header alone. The follow pages need a name and nothing else — running the two post
  *  queries for them would be two cold-render queries per handle for a string. */
-export async function getProfileHeader(raw: string): Promise<Profile | null> {
+export const getProfileHeader = cache(async (raw: string): Promise<Profile | null> => {
   const handle = raw.replace(/^@/, "").toLowerCase();
   const row = await queryOne<any>("profile", { handle, world: world() });
   return row ? toProfile(row) : null;
-}
+});
 
-export async function getProfile(
+export const getProfile = cache(async (
   raw: string,
-): Promise<{ profile: Profile; posts: Post[]; replies: Post[] } | null> {
+): Promise<{ profile: Profile; posts: Post[]; replies: Post[] } | null> => {
   const handle = raw.replace(/^@/, "").toLowerCase();
   const args = { handle, world: world(), limit: 50 };
   const row = await queryOne<any>("profile", { handle, world: world() });
@@ -144,7 +147,7 @@ export async function getProfile(
   ]);
 
   return { profile: toProfile(row), posts: posts.map(toPost), replies: replies.map(toPost) };
-}
+});
 
 function toProfile(row: any): Profile {
   return {

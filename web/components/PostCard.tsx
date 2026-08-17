@@ -3,19 +3,14 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Liker, Post, ago, getLikes, poke } from "../lib/api";
+import { Liker, Post, ago, getLikes, likedWhen, plural, poke } from "../lib/api";
 import Avatar from "./Avatar";
+import LikersModal from "./LikersModal";
 
 // Faces are capped because likes are free arithmetic — a popular post is liked by most of
 // the cast, and every extra face is a wider row for no more information.
 const LIKER_FACES = 5;
 const LIKER_NAMES = 2;
-
-// `ago` returns a bare "now" under a minute, which reads as "liked now ago" appended raw.
-function likedWhen(iso: string): string {
-  const when = ago(iso);
-  return when === "now" ? "just now" : `${when} ago`;
-}
 
 function likedBy(likers: Liker[]): string {
   const shown = likers.slice(0, LIKER_NAMES).map((l) => l.name);
@@ -48,6 +43,7 @@ export default function PostCard({
   const [likers, setLikers] = useState<Liker[] | null>(null);
   const [showLikers, setShowLikers] = useState(false);
   const [likersError, setLikersError] = useState(false);
+  const [listing, setListing] = useState(false);
 
   function openThread() {
     if (linked) router.push(`/thread/${post.id}`);
@@ -145,10 +141,10 @@ export default function PostCard({
         )}
 
         <footer className="post-foot">
-          <span>{post.replyCount} replies</span>
+          <span>{plural(post.replyCount, "reply", "replies")}</span>
           {post.likeCount > 0 ? (
             <button onClick={toggleLikers} aria-expanded={showLikers}>
-              {post.likeCount.toLocaleString()} likes
+              {plural(post.likeCount, "like", "likes")}
             </button>
           ) : (
             <span>0 likes</span>
@@ -191,10 +187,16 @@ export default function PostCard({
                     </Link>
                   ))}
                 </span>
-                <span className="liker-names">{likedBy(likers)}</span>
+                <button className="liker-names" onClick={() => setListing(true)}>
+                  {likedBy(likers)}
+                </button>
               </>
             )}
           </div>
+        )}
+
+        {listing && likers && (
+          <LikersModal likers={likers} onClose={() => setListing(false)} />
         )}
 
         {canPoke && open && !sent && (

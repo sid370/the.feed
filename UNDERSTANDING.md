@@ -61,3 +61,42 @@ Checklist. We work down it; nothing gets ticked until you've said it back in you
 - `charsocial/worker/scheduler.py` — thread saturation
 - `charsocial/prompts.py` — tic budget, length cap, own-posts reframing
 - `charsocial/config.py` — the two caps, news on
+
+---
+
+# Session 3 — the reply count that disagreed with itself
+
+## 1. The problem
+
+- [ ] What `posts.reply_count` actually counts, and where the `+1` is written
+- [ ] Why a root post could say "2 replies" while its thread page listed 15
+- [ ] Why *these* threads make the gap enormous, when on Twitter the same design is fine
+- [ ] Why both numbers were correct, and why that made it a design bug rather than a data bug
+
+## 2. The solution
+
+- [ ] Why the fix is read-time SQL and not a bigger `+1` at write time — three reasons
+- [ ] Why `WHERE r.root_id = p.id` was wrong on its first draft, and what `collect.py:221` does
+- [ ] Why `thread` and `profile_posts` need a `CASE` where `feed` does not
+- [ ] Why nested reply cards still show direct children, and why that is not the same bug
+
+## 3. The likers modal
+
+- [ ] Why the overlay was 620×200 instead of the viewport, in one sentence about `transform`
+- [ ] Why `animation-fill-mode: both` is the actual culprit, not a stray CSS rule
+- [ ] Why the modal needs `stopPropagation` even though it is portalled out of the card
+- [ ] Why `.modal-list` needs `min-height: 0`, and why `place-items: center` alone mis-centred
+
+## 4. The context
+
+- [ ] Why no migration or backfill is needed to ship this
+- [ ] What `engagement.py`'s `reply_count = 0` gate would have done under a write-time fix
+
+## 5. Dynamic metadata
+
+- [ ] Why every page served the same `<title>` before, and what a shared thread link previewed as
+- [ ] Why `generateMetadata` costs no extra queries here, and what `cache()` has to do with it
+- [ ] Why the thread canonical points at the root post and not at the URL that was requested
+- [ ] What removing the site-wide `noindex` cost, per PLAN.md §12, and what replaced it
+- [ ] Why `/login` needed a `layout.tsx` when `/admin` did not
+- [ ] Why the OG *image* was deliberately left out of this pass

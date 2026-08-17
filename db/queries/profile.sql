@@ -16,7 +16,10 @@ SELECT c.handle, c.name, c.avatar_seed, c.avatar_url, c.is_real_person, c.status
 
 -- One query for both tabs; the boolean picks which side of the parent_id split to return.
 -- name: profile_posts
-SELECT p.id, p.body, p.created_at, p.like_count, p.reply_count, p.parent_id,
+SELECT p.id, p.body, p.created_at, p.like_count, p.parent_id,
+       CASE WHEN p.parent_id IS NULL
+            THEN (SELECT count(*) FROM posts r WHERE r.root_id = p.id AND r.id <> p.id)
+            ELSE p.reply_count END AS reply_count,
        coalesce(pc.handle, parent.author_human) AS replying_to,
        c.handle, c.name, c.avatar_seed, c.avatar_url, c.is_real_person,
        h.title AS headline_title, h.url AS headline_url

@@ -177,16 +177,6 @@ a.worldstat-row:hover, a.worldstat-row:hover b { color: var(--amber); }
   margin-left: 26px;
 }
 
-.thread-count {
-  font-family: var(--font-data);
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  color: var(--dim);
-  padding: 14px 26px 6px;
-  margin: 0;
-}
-
 .backlink {
   all: unset;
   cursor: pointer;
@@ -324,7 +314,108 @@ a.post-name:hover { color: var(--amber); }
   .liker-face { transition: none; }
 }
 
-.liker-names { min-width: 0; }
+.liker-names {
+  all: unset;
+  min-width: 0;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: inherit;
+  color: var(--dim);
+  text-align: left;
+}
+.liker-names:hover, .liker-names:focus-visible { color: var(--amber); }
+
+/* ------------------------------------------------------------------- modal */
+
+.modal-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  /* An auto track would size to the unclamped list and push the panel off-screen. */
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+  place-items: center;
+  padding: 24px;
+  background: rgba(10, 13, 18, 0.72);
+}
+
+.modal {
+  width: min(420px, 100%);
+  /* Caps the panel at the viewport so only the list scrolls, never the page behind it. */
+  max-height: min(560px, 100%);
+  display: flex;
+  flex-direction: column;
+  background: var(--ground);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 16px;
+}
+
+.modal-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.modal-head h2 {
+  font-family: var(--font-data);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--dim);
+  margin: 0;
+}
+.modal-head button {
+  all: unset;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--dim);
+}
+.modal-head button:hover { color: var(--amber); }
+
+/* min-height:0 or the flex item refuses to shrink under its content and the panel grows
+   past max-height instead of the list scrolling. */
+.modal-list { overflow-y: auto; min-height: 0; }
+
+.modal-none {
+  font-family: var(--font-data);
+  font-size: 11px;
+  color: var(--dim);
+  padding: 14px 2px;
+  margin: 0;
+}
+
+.liker-row {
+  all: unset;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px;
+  border-radius: 4px;
+}
+.liker-row:hover, .liker-row:focus-visible { background: var(--panel); }
+
+.liker-row-id {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+.liker-row-id b { font-size: 13.5px; font-weight: 700; color: var(--ink); }
+.liker-row-id span {
+  font-family: var(--font-data);
+  font-size: 11px;
+  color: var(--dim);
+}
+
+.liker-row-when {
+  flex: none;
+  font-family: var(--font-data);
+  font-size: 10.5px;
+  color: var(--dim);
+}
 
 /* ----------------------------------------------------------------- profile */
 

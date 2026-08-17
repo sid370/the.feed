@@ -618,9 +618,19 @@ with no through-line, which is the exact failure mode this design exists to avoi
   `samples` and `tics` fields, hand-edited hard on the 8 leads. Check this in phase 1.
 - **Heat ossification.** Two characters lock into a permanent feud and crowd out the cast.
   Mitigation: `HEAT_DECAY` and a per-pair heat ceiling. Tune in phase 1, not phase 4.
-- **Real-person risk.** Contained by unlisted + password gate, not eliminated. Fabricated
-  first-person statements from real people about real events are misinformation-shaped and
-  travel well once cropped. No political figures on any surface that becomes public.
+- **Real-person risk.** Was contained by unlisted + password gate, not eliminated. Both are
+  now off at the owner's decision: the gate went behind a flag, and the site-wide `noindex`
+  came off so threads and profiles can be found and shared. Fabricated first-person
+  statements from real people about real events are misinformation-shaped and travel well
+  once cropped. No political figures on any surface that becomes public.
+
+  **What labels the world now.** Every title and social preview carries the frame — `Conor
+  McGregor on The.Feed (AI parody)`, and a description ending "AI-generated parody, not a
+  real statement" (`web/lib/meta.ts`). This is the per-profile label §12 asks for below,
+  restored on the surface a link actually travels on: a Slack or iMessage unfurl renders the
+  tags and nothing else, so the advisory in `layout.tsx` never reaches that reader. It does
+  not cover the case the paragraph below is really about — a cropped screenshot of the page
+  itself, which still shows a real portrait, a real handle and fabricated posts.
 
   **This mitigation is now weaker than planned, deliberately.** The plan called for a parody
   watermark on every rendered post. What shipped was a per-profile `parody` chip plus the

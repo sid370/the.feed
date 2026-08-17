@@ -1,9 +1,29 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import PostCard from "../../../components/PostCard";
 import { getThread } from "../../../lib/world";
 import { pokeEnabled } from "../../../lib/flags";
+import { SITE, pageMeta, parodyTitle, quoted } from "../../../lib/meta";
 
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  const posts = await getThread(id);
+  const root = posts.find((p) => !p.parentId) ?? posts[0];
+  if (!root) return { title: SITE };
+
+  return pageMeta({
+    title: parodyTitle(root.author.name),
+    description: quoted(root.body),
+    // Every post in the thread renders this same page, so all of them point at the root.
+    path: `/thread/${root.id}`,
+  });
+}
 
 
 export default async function Thread({ params }: { params: Promise<{ id: string }> }) {
@@ -32,12 +52,6 @@ export default async function Thread({ params }: { params: Promise<{ id: string 
         </header>
 
         <PostCard post={root} index={0} linked={false} canPoke={pokeEnabled()} />
-
-        {/* Counts every descendant of the root, so it can exceed the root's direct
-            reply count. */}
-        {replies.length > 0 && (
-          <p className="thread-count">{replies.length} in this thread</p>
-        )}
 
         {replies.map((post, i) => (
           <PostCard

@@ -1,5 +1,8 @@
+-- posts.reply_count only ever counts direct children, and these threads run as chains, so a
+-- root with one child can hold fifteen posts. The card must show what opening it reveals.
 -- name: feed
-SELECT p.id, p.body, p.created_at, p.like_count, p.reply_count, p.heat,
+SELECT p.id, p.body, p.created_at, p.like_count, p.heat,
+       (SELECT count(*) FROM posts r WHERE r.root_id = p.id AND r.id <> p.id) AS reply_count,
        p.parent_id, p.quote_of_id,
        c.handle, c.name, c.avatar_seed, c.avatar_url, c.is_real_person,
        h.title AS headline_title, h.url AS headline_url
@@ -12,7 +15,10 @@ SELECT p.id, p.body, p.created_at, p.like_count, p.reply_count, p.heat,
  LIMIT :limit OFFSET :offset
 
 -- name: thread
-SELECT p.id, p.body, p.created_at, p.like_count, p.reply_count, p.parent_id,
+SELECT p.id, p.body, p.created_at, p.like_count, p.parent_id,
+       CASE WHEN p.parent_id IS NULL
+            THEN (SELECT count(*) FROM posts r WHERE r.root_id = p.id AND r.id <> p.id)
+            ELSE p.reply_count END AS reply_count,
        coalesce(pc.handle, parent.author_human) AS replying_to,
        c.handle, c.name, c.avatar_seed, c.avatar_url, c.is_real_person,
        h.title AS headline_title, h.url AS headline_url
