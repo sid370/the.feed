@@ -16,7 +16,7 @@ from charsocial.models import (
     TurnContext,
 )
 from charsocial.schemas import Decision, json_schema
-from charsocial.worker import scheduler
+from charsocial.worker import collect, scheduler
 from charsocial.worker.news import _share
 
 
@@ -195,6 +195,34 @@ def test_rotate_samples_trims_each_group_without_touching_the_card():
         for t in range(10)
     }
     assert len(seen) > 1, "the rail must move between ticks"
+
+
+class _StubCursor:
+    """Enough cursor for the scroll path, which touches no rows."""
+
+    def __init__(self):
+        self.args = []
+
+    def execute(self, sql, args=None):
+        self.args.append(args)
+
+    def fetchone(self):
+        return None
+
+
+def test_apply_coerces_character_id_before_any_self_check():
+    """The batch payload is JSON, so character_id comes back a string while every id read
+    out of the database is a UUID, and `"37b4…" == UUID("37b4…")` is False. That made each
+    is-this-me guard fail open the moment a character could target its own thread: the
+    self-relation trips a check constraint and the savepoint throws the whole turn away."""
+    cur = _StubCursor()
+    actor = uuid4()
+
+    collect._apply(cur, {"character_id": str(actor)}, {"action": "scroll"}, None)
+
+    passed = [value for args in cur.args if args for value in args]
+    assert actor in passed, "downstream must receive a UUID"
+    assert str(actor) not in passed, "a string here silently defeats every self-guard"
 
 
 def test_offline_provider_round_trips_a_batch():

@@ -109,6 +109,17 @@ def _apply(cur: db.Cursor, ctx: dict, decision: dict, submitted_at) -> int:
     if not character_id or not isinstance(decision, dict):
         return 0
 
+    # The batch payload round-trips through JSON, so this arrives as a string while every id
+    # read back out of the database is a UUID. `"37b4…" == UUID("37b4…")` is False, so every
+    # is-this-me guard downstream fails open. That was unreachable while build_slate was the
+    # only source of targets — it excludes your own posts — and became reachable the moment
+    # a character could aim at its own thread. Left alone it takes out the whole turn: the
+    # self-relation trips a check constraint and the savepoint discards the reply.
+    try:
+        character_id = uuidlib.UUID(str(character_id))
+    except (ValueError, AttributeError, TypeError):
+        return 0
+
     action = decision.get("action")
     if action not in VALID_ACTIONS:
         return 0
