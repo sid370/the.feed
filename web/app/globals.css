@@ -169,6 +169,34 @@ a.worldstat-row:hover, a.worldstat-row:hover b { color: var(--amber); }
 /* .field carries a bottom margin for the stacked login form; here it is the only control. */
 .searchbar .field { margin-bottom: 0; }
 
+/* The results below are the previous query's until the new ones land. Saying so beats both
+   a spinner and a blank list, and the results stay readable while it resolves. */
+.searchbar[data-pending="true"] .field { border-color: var(--amber-dim); }
+
+.people {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 12px 26px;
+  border-bottom: 1px solid var(--line);
+  scrollbar-width: none;
+}
+.people::-webkit-scrollbar { display: none; }
+
+.person-chip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: none;
+  padding: 5px 12px 5px 5px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+.person-chip:hover { border-color: var(--amber-dim); }
+.person-chip .avatar { border-radius: 50%; }
+.person-chip b { font-size: 13px; font-weight: 700; }
+.person-chip span { font-family: var(--font-data); font-size: 11px; color: var(--dim); }
+
 /* -------------------------------------------------------------------- post */
 
 .post {
@@ -838,6 +866,7 @@ a.pair:hover .pair-names { color: var(--amber); }
   .post { padding: 16px 18px; }
   .feedhead { padding: 20px 18px 12px; }
   .searchbar { padding: 10px 18px; }
+  .people { padding: 10px 18px; }
 
   /* 72px of indent out of 390 is a quarter of the line gone. The rule alone says "reply". */
   .post[data-reply="true"] { margin-left: 14px; padding-left: 20px; }
