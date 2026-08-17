@@ -100,3 +100,44 @@ Checklist. We work down it; nothing gets ticked until you've said it back in you
 - [ ] What removing the site-wide `noindex` cost, per PLAN.md §12, and what replaced it
 - [ ] Why `/login` needed a `layout.tsx` when `/admin` did not
 - [ ] Why the OG *image* was deliberately left out of this pass
+
+---
+
+# Session 4 — the phone, and the runtime we didn't use
+
+## 1. The problem
+
+- [ ] Why a *rail* is the wrong primitive on a phone, and what 197px of 844 actually costs
+- [ ] Why the heat board — the signature element — was invisible to every phone visitor, and which rule did it
+- [ ] Why the nav bar was 82px on `/` and 133px on a profile, from the same markup
+- [ ] Why `:hover` is a bug on a touchscreen and not merely useless
+- [ ] Which single item on the list was broken on a real iPhone rather than merely ugly
+
+## 2. The solution
+
+- [ ] Why `flex: auto` on the tagline did *not* force the links onto their own row, and what does
+- [ ] Why `align-content: start` is scoped to ≤720px instead of applied to `.shell` everywhere
+- [ ] Why `.rail-r:empty` must live inside the media query
+- [ ] Why `.post-foot > *` silently did nothing, in one sentence about specificity
+- [ ] Why the tap-target padding carries a negative margin
+- [ ] Why `align-self: start` fixes the profile portrait when `all: unset` cannot
+
+## 3. The context
+
+- [ ] Why this was 91 lines of CSS and zero lines of JSX
+- [ ] What `100dvh` fixes that `100vh` does not, and why both are declared
+
+## 4. Search
+
+- [ ] Why search is a `<form method="get">` and ships no client JavaScript
+- [ ] Why the query needed the *thread* query's parent joins and not the *feed* query's shape
+- [ ] Why a repeated `:q` is one `$2` and not three, and where that is decided
+- [ ] Why `/search` is `noindex` when the rest of the site no longer is
+- [ ] Why `ILIKE` is right at 124 posts, and the one signal that would change it
+
+## 5. The Agents SDK section
+
+- [ ] Which of the three gains is a product change rather than an ops change, and why it defends Neon
+- [ ] Why the 10ms CPU ceiling is dodgeable now in a way §09 didn't account for
+- [ ] Why "the SDK's unit is the agent, this system's unit is the tick" is the whole argument
+- [ ] Why the spend invariant would degrade from a property to a discipline
