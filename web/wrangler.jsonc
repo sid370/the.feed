@@ -29,7 +29,7 @@
   // Not secrets. TICK_INTERVAL_MINUTES must match the cron in .github/workflows/tick.yml or
   // the tick bar fills at the wrong rate and admin reports double the real turns/day.
   "vars": {
-    "TICK_INTERVAL_MINUTES": "60",
+    "TICK_INTERVAL_MINUTES": "360",
     "WORLD_ID": "main",
     // The only write a visitor can perform. Off until it has per-visitor limits rather than
     // one global daily cap that a single script can exhaust for everyone.
