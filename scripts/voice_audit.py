@@ -10,33 +10,16 @@ import sys
 
 from charsocial import db
 from charsocial.config import CONFIG
+from charsocial.text import containment as _containment
+from charsocial.text import words as _words
 
 TIC_MIN_CHARS = 4
 
 # One post to a character's name shows every tic at 100% — a sample-size artefact.
 TIC_MIN_POSTS = 10
 
-# Words this short are grammar, not subject matter, and every post shares them.
-WORD_MIN_CHARS = 4
-
 TARGETS = {"originals": 0.40, "max_thread": 20, "tic_rate": 0.15,
            "echo": 0.45, "self_repeat": 0.40}
-
-
-def _words(text: str) -> frozenset[str]:
-    return frozenset(re.findall(r"[a-z']{%d,}" % WORD_MIN_CHARS, (text or "").lower()))
-
-
-def _containment(a: frozenset[str], b: frozenset[str]) -> float:
-    """Overlap against the SHORTER text, not the union.
-
-    Jaccard would score a thirty-word post rewriting a twelve-word card sample as barely
-    similar, because the union is dominated by the longer one. What is being asked here is
-    "how much of the smaller thing reappears in the bigger one", and that is containment.
-    """
-    if not a or not b:
-        return 0.0
-    return len(a & b) / min(len(a), len(b))
 
 
 def _window(since_hours: float | None) -> tuple[str, dict]:

@@ -220,8 +220,9 @@ def turn_prompt(ctx: TurnContext) -> str:
         lines += [
             "",
             "## Your own threads, still open",
-            "You posted these. If you have more to say on one of these subjects, reply to it "
-            "by its id instead of writing a new post about the same thing.",
+            "You said these already, so the rule above covers them too — not again, not "
+            "reworded, not the same shape with new words. If you have more to say on one of "
+            "these subjects, reply to it by its id. Never write a new post about it.",
         ]
         for thread in ctx.own_threads:
             answered = f" ({thread.replies} replies so far)" if thread.replies else " (no replies yet)"

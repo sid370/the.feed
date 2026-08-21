@@ -160,6 +160,105 @@ def test_own_threads_are_offered_as_reply_targets():
     assert "reply to it by its id" in prompt
 
 
+def test_own_threads_carry_the_prohibition_they_used_to_escape():
+    """@mcgregor reannounced a documentary 48 minutes later, the first one in front of him
+    under a reply invitation with no prohibition attached."""
+    body = "I'd like to take this opportunity to announce a documentary. Coming soon."
+    prompt = turn_prompt(
+        TurnContext(
+            character_id=uuid4(),
+            name="Conor McGregor",
+            handle="mcgregor",
+            persona_card={},
+            engagement_profile={},
+            own_posts=[body],
+            own_threads=[OwnThread(id="m1", body=body)],
+        )
+    )
+    assert "do not say any of it again" in prompt
+    assert "reply to it by its id" in prompt
+    assert "not the same shape with new words" in prompt
+    assert "Never write a new post about it." in prompt
+
+
+class _RepeatCursor:
+    """Answers the two queries _repeats makes: recent bodies, then the character's card."""
+
+    def __init__(self, recent=(), samples=None):
+        self.recent = [{"body": b} for b in recent]
+        self.card = {"persona_card": {"samples": samples or {}}}
+
+    def execute(self, sql, args=None):
+        pass
+
+    def fetchall(self):
+        return self.recent
+
+    def fetchone(self):
+        return self.card
+
+
+MCGREGOR_FIRST = ("I'd like to take this opportunity to announce the Proper Twelve whiskey "
+                  "documentary is in production. Full access. My camera crew. Coming soon. "
+                  "Easy work.")
+MCGREGOR_SECOND = ("I'd like to take this opportunity to announce a Dublin to Vegas "
+                   "documentary. Full crew, full access, the whole road to the top. Coming "
+                   "soon. Easy work.")
+
+
+def test_a_reworded_repeat_is_dropped_at_write_time(monkeypatch):
+    """Both live on the deployed site, 48 minutes apart, at 0.76 containment."""
+    monkeypatch.setattr(CONFIG, "llm_provider", "anthropic")
+    cur = _RepeatCursor(recent=[MCGREGOR_FIRST])
+
+    assert collect._repeats(cur, uuid4(), MCGREGOR_SECOND)
+
+
+def test_a_card_sample_posted_back_is_dropped_too(monkeypatch):
+    """@killtony scored 1.00 echo: rotating the samples moves the rail, it cannot remove it."""
+    monkeypatch.setattr(CONFIG, "llm_provider", "anthropic")
+    cur = _RepeatCursor(samples={"posts": [
+        "DOORS OPEN. Bucket's on the stool. If your name's in there you already agreed to this."
+    ]})
+
+    assert collect._repeats(
+        cur,
+        uuid4(),
+        "Bucket's on the stool. Doors open in ten. If your name's in there you already "
+        "agreed to this.",
+    )
+
+
+def test_a_short_callback_is_not_a_repeat(monkeypatch):
+    """Three long words, all borrowed, scores 1.00 — and a callback is how an argument sounds."""
+    monkeypatch.setattr(CONFIG, "llm_provider", "anthropic")
+    cur = _RepeatCursor(recent=[("rounding error with a thursday timestamp still beats a "
+                                 "legacy with no date. ship it then")])
+
+    assert not collect._repeats(cur, uuid4(), "got a date or a rounding error")
+
+
+def test_something_new_survives_the_guard(monkeypatch):
+    monkeypatch.setattr(CONFIG, "llm_provider", "anthropic")
+    cur = _RepeatCursor(recent=[MCGREGOR_FIRST], samples={"posts": ["Easy work."]})
+
+    assert not collect._repeats(
+        cur,
+        uuid4(),
+        "Dublin airport at six in the morning and a man asked me to sign his cast. Signed "
+        "it. Told him to break the other one.",
+    )
+
+
+def test_offline_bodies_are_exempt_because_they_are_card_samples():
+    """Every offline body is a verbatim card sample, so scoring them empties the world."""
+    assert CONFIG.llm_provider == "offline", "the test suite must not be able to spend"
+    sample = "I'd like to take this opportunity to apologise. To absolutely NOBODY."
+    cur = _RepeatCursor(samples={"posts": [sample]})
+
+    assert not collect._repeats(cur, uuid4(), sample)
+
+
 def test_world_rules_forbid_reusing_a_shape_not_just_a_line():
     """@netflix repeated its own docuseries skeleton with the earlier post visible under
     'do not say any of it again' — forbidding restated lines never covered reused form."""

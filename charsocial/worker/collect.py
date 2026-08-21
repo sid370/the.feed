@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import uuid as uuidlib
 
-from charsocial import db
+from charsocial import db, text
 from charsocial.config import CONFIG
 from charsocial.llm import LLMError, LLMFatalError, provider
 from charsocial.models import Usage
@@ -172,6 +172,11 @@ def _apply(cur: db.Cursor, ctx: dict, decision: dict, submitted_at) -> int:
     if action in {"reply", "quote"} and not target_id:
         return 0
 
+    # Dropped, not published. The relation bump and memory note above are kept: the character
+    # read the slate and formed a view, it just has nothing new to say, which is scrolling.
+    if _repeats(cur, character_id, body):
+        return 0
+
     if action == "post":
         _write_post(cur, character_id, body, headline_id=ctx.get("headline_id"))
         return 1
@@ -188,6 +193,32 @@ def _apply(cur: db.Cursor, ctx: dict, decision: dict, submitted_at) -> int:
     _notify(cur, target_author, new_id, "reply", actor=character_id)
     heat.bump_post(cur, target_id, count_reply=True)
     return 1
+
+
+def _repeats(cur: db.Cursor, character_id, body: str) -> bool:
+    """True when the body reproduces one of the character's own recent posts or card samples."""
+    # Offline bodies ARE card samples, so scoring them would empty every offline world.
+    if CONFIG.llm_provider == "offline":
+        return False
+
+    mine = text.words(body)
+    if len(mine) < CONFIG.repeat_min_words:
+        return False
+
+    cur.execute(
+        "SELECT body FROM posts WHERE character_id = %s ORDER BY created_at DESC LIMIT %s",
+        (character_id, CONFIG.repeat_window),
+    )
+    spent = [row["body"] for row in cur.fetchall()]
+
+    cur.execute("SELECT persona_card FROM characters WHERE id = %s", (character_id,))
+    row = cur.fetchone()
+    samples = ((row["persona_card"] if row else None) or {}).get("samples") or {}
+    spent += [s for group in samples.values() for s in group or []]
+
+    return any(
+        text.containment(mine, text.words(other)) >= CONFIG.repeat_max for other in spent
+    )
 
 
 def _valid_post_id(cur: db.Cursor, raw):

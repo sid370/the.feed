@@ -96,6 +96,12 @@ class Settings(BaseSettings):
     samples_per_group: int = Field(default=3, ge=1, le=20)
     relations_in_context: int = Field(default=5, ge=0, le=50)
 
+    # The write-time repeat guard. 0.5 over 12 posts drops 13% of the deployed world's bodies.
+    repeat_window: int = Field(default=12, ge=0, le=100)
+    repeat_max: float = Field(default=0.5, gt=0, le=1)
+    # Containment over a handful of words is noise, not repetition.
+    repeat_min_words: int = Field(default=6, ge=1, le=50)
+
     # Free engagement — arithmetic only, never an LLM call.
     # likes_per_tick is a big-world ceiling. On its own it does not scale down: in a small
     # cast it exceeds the number of distinct (post, liker) pairs several times over, so

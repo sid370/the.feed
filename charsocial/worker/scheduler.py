@@ -400,15 +400,13 @@ def build_context(
         for r in cur.fetchall()
     ][::-1]
 
-    # Everything else recent, as spent material. Anything already listed above is skipped —
-    # the same post under both "do not repeat this" and "reply to this" reads as one muddled
-    # instruction instead of two clear ones.
-    listed = {t.body for t in own_threads}
+    # Everything recent, as spent material — own threads included. Subtracting them put the
+    # post most likely to be repeated under a reply invitation and nothing forbidding it.
     cur.execute(
         "SELECT body FROM posts WHERE character_id = %s ORDER BY created_at DESC LIMIT %s",
         (cid, CONFIG.own_posts_in_context),
     )
-    own_posts = [r["body"] for r in cur.fetchall() if r["body"] not in listed][::-1]
+    own_posts = [r["body"] for r in cur.fetchall()][::-1]
 
     # Union of "who I care about most" and "who is actually in front of me right now".
     # Ranking relations purely by global heat means the grudge is often missing at the
